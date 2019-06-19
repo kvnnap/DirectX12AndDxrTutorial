@@ -329,7 +329,7 @@ wrl::ComPtr<ID3D12GraphicsCommandList> Engine::Graphics::createCommandList()
 	wrl::ComPtr<ID3D12GraphicsCommandList> commandList;
 
 	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocators[0].Get(), nullptr, IID_PPV_ARGS(&commandList)));
+	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocators[pCurrentBackBufferIndex].Get(), nullptr, IID_PPV_ARGS(&commandList)));
 
 	// Since command lists are created in the recording state, we close it
 	GFXTHROWIFFAILED(commandList->Close());
