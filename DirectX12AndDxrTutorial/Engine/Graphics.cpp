@@ -1,6 +1,7 @@
 #include "Graphics.h"
 
 #include <chrono>
+#include <iostream>
 #include <d3dcompiler.h>
 #include "Libraries/d3dx12.h"
 
@@ -36,13 +37,31 @@ Graphics::Graphics(HWND hWnd)
 	enableDebugLayer();
 	
 	// Get DX12 compatible hardware device - Adapter contains info about the actual device
-	wrl::ComPtr<IDXGIAdapter4> adapter = getAdapter();
+	D3D_FEATURE_LEVEL featureLevels[] = {
+		D3D_FEATURE_LEVEL_12_1,
+		D3D_FEATURE_LEVEL_12_0,
+		D3D_FEATURE_LEVEL_11_1,
+		D3D_FEATURE_LEVEL_11_0
+	};
+
+	wrl::ComPtr<IDXGIAdapter4> adapter;
+	for (auto featureLevel : featureLevels) {
+		cout << "Trying Feature Level: " << featureLevel << "... ";
+		adapter = getAdapter(featureLevel);
+		if (adapter) {
+			// Create d3d12 device - A device gives us access to create resources on the GPU
+			GFXTHROWIFFAILED(D3D12CreateDevice(adapter.Get(), featureLevel, IID_PPV_ARGS(&pDevice)));
+			cout << "OK" << endl;
+			break;
+		}
+		else {
+			cout << "FAILED" << endl;
+		}
+	}
+
 	if (!adapter) {
 		ThrowException("Cannot find a compatible DX12 hardware device");
 	}
-
-	// Create d3d12 device - A device gives us access to create resources on the GPU
-	GFXTHROWIFFAILED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&pDevice)));
 
 	// Enable debug messages in debug mode
 	setupDebugLayer();
@@ -396,7 +415,7 @@ void Engine::Graphics::flush()
 	waitForFenceValue();
 }
 
-wrl::ComPtr<IDXGIAdapter4> Engine::Graphics::getAdapter(bool useWarp)
+wrl::ComPtr<IDXGIAdapter4> Engine::Graphics::getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp)
 {
 	wrl::ComPtr<IDXGIFactory7> dxgiFactory = createFactory();
 
@@ -412,7 +431,7 @@ wrl::ComPtr<IDXGIAdapter4> Engine::Graphics::getAdapter(bool useWarp)
 			dxgiAdapter1->GetDesc1(&dxgiAdapterDesc1);
 
 			const bool isHardware = (dxgiAdapterDesc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0;
-			const bool d3d12DeviceCreationSuccess = SUCCEEDED(D3D12CreateDevice(dxgiAdapter1.Get(), D3D_FEATURE_LEVEL_12_1, __uuidof(ID3D12Device5), nullptr));
+			const bool d3d12DeviceCreationSuccess = SUCCEEDED(D3D12CreateDevice(dxgiAdapter1.Get(), featureLevel, __uuidof(ID3D12Device5), nullptr));
 			if (isHardware && d3d12DeviceCreationSuccess) {
 				GFXTHROWIFFAILED(dxgiAdapter1.As(&dxgiAdapter4));
 				break;

@@ -58,7 +58,7 @@ namespace Engine {
 		void flush();
 
 
-		Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(bool useWarp = false);
+		Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp = false);
 
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
