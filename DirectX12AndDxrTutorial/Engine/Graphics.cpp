@@ -24,7 +24,7 @@ using namespace std;
 using namespace Engine;
 
 Graphics::Graphics(HWND hWnd)
-	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), fenceEvent(NULL)
+	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{}
 {
 	HRESULT hr;
 
@@ -66,8 +66,8 @@ Graphics::Graphics(HWND hWnd)
 	// Enable debug messages in debug mode
 	setupDebugLayer();
 
-	// Create command queue
-	pCommandQueue = createCommandQueue(D3D12_COMMAND_LIST_TYPE_DIRECT);
+	// Create command queue, with command list and command allocators
+	pCommandQueue = make_unique<CommandQueue>(pDevice, D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	// Create swap chain
 	pSwap = createSwapChain(hWnd);
@@ -77,20 +77,6 @@ Graphics::Graphics(HWND hWnd)
 
 	// Create render target Views
 	createRenderTargetViews();
-
-	// Create command allocators
-	for (int i = 0; i < std::size(pBackBuffers); ++i) {
-		pCommandAllocators[i] = createCommandAllocator();
-	}
-
-	// Create command List
-	pCommandList = createCommandList();
-
-	// Create Fence
-	pFence = createFence();
-
-	// Create Fence Event
-	fenceEvent = createFenceEvent();
 
 	// Save tearing support
 	tearingSupported = checkTearingSupport();
@@ -115,26 +101,22 @@ Graphics::~Graphics() {
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();*/
 
-	if (fenceEvent != NULL) {
-		::CloseHandle(fenceEvent);
-	}
+	// Ensure that all GPU stuff is finished before releasing resources
+	pCommandQueue->flush();
 }
 
 void Graphics::clearBuffer(float red, float green, float blue)
 {
 	// begins a frame
-	auto commandAllocator = pCommandAllocators[pCurrentBackBufferIndex];
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
 
-	commandAllocator->Reset();
-	pCommandList->Reset(commandAllocator.Get(), nullptr);
-
 	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-	pCommandList->ResourceBarrier(1, &barrier);
+	pCurrentCommandList = pCommandQueue->getCommandList();
+	pCurrentCommandList->ResourceBarrier(1, &barrier);
 
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
 	FLOAT color[] = { red, green, blue, 1.0f };
-	pCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
+	pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
 }
 
 void Engine::Graphics::init()
@@ -168,21 +150,15 @@ void Graphics::endFrame()
 {
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
 	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-	pCommandList->ResourceBarrier(1, &barrier);
+	pCurrentCommandList->ResourceBarrier(1, &barrier);
+
+	frameFenceValues[pCurrentBackBufferIndex] = pCommandQueue->executeCommandList(pCurrentCommandList);
+	pCurrentCommandList.Reset();
 
 	HRESULT hr;
-	GFXTHROWIFFAILED(pCommandList->Close());
-
-	ID3D12CommandList* const commandLists[] = {
-		pCommandList.Get()
-	};
-
-	pCommandQueue->ExecuteCommandLists(std::size(commandLists), commandLists);
 	GFXTHROWIFFAILED(pSwap->Present(1u, 0u));
-	signal();
-
 	pCurrentBackBufferIndex = pSwap->GetCurrentBackBufferIndex();
-	waitForFenceValue();
+	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 }
 
 void Engine::Graphics::simpleDraw(uint64_t timeMs)
@@ -276,18 +252,6 @@ Microsoft::WRL::ComPtr<IDXGIFactory7> Engine::Graphics::createFactory()
 	return dxgiFactory;
 }
 
-wrl::ComPtr<ID3D12CommandQueue> Engine::Graphics::createCommandQueue(D3D12_COMMAND_LIST_TYPE listType)
-{
-	HRESULT hr;
-	wrl::ComPtr<ID3D12CommandQueue> commandQueue;
-	D3D12_COMMAND_QUEUE_DESC cQueueDesc = {};
-	cQueueDesc.Type = listType;
-	cQueueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	cQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-	GFXTHROWIFFAILED(pDevice->CreateCommandQueue(&cQueueDesc, IID_PPV_ARGS(&commandQueue)));
-	return commandQueue;
-}
-
 wrl::ComPtr<IDXGISwapChain4> Engine::Graphics::createSwapChain(HWND hWnd)
 {
 	DXGI_SWAP_CHAIN_DESC1 sd = {};
@@ -312,7 +276,7 @@ wrl::ComPtr<IDXGISwapChain4> Engine::Graphics::createSwapChain(HWND hWnd)
 
 	HRESULT hr;
 	auto factory = createFactory();
-	GFXTHROWIFFAILED(factory->CreateSwapChainForHwnd(pCommandQueue.Get(), hWnd, &sd, nullptr, nullptr, &swapChain1));
+	GFXTHROWIFFAILED(factory->CreateSwapChainForHwnd(pCommandQueue->getCommandQueue().Get(), hWnd, &sd, nullptr, nullptr, &swapChain1));
 	GFXTHROWIFFAILED(swapChain1.As(&swapChain));
 	pCurrentBackBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -333,69 +297,6 @@ wrl::ComPtr<ID3D12DescriptorHeap> Engine::Graphics::createDescriptorHeap(D3D12_D
 	return descriptorHeap;
 }
 
-wrl::ComPtr<ID3D12CommandAllocator> Engine::Graphics::createCommandAllocator()
-{
-	wrl::ComPtr<ID3D12CommandAllocator> commandAllocator;
-
-	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
-
-	return commandAllocator;
-}
-
-wrl::ComPtr<ID3D12GraphicsCommandList> Engine::Graphics::createCommandList()
-{
-	wrl::ComPtr<ID3D12GraphicsCommandList> commandList;
-
-	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocators[pCurrentBackBufferIndex].Get(), nullptr, IID_PPV_ARGS(&commandList)));
-
-	// Since command lists are created in the recording state, we close it
-	GFXTHROWIFFAILED(commandList->Close());
-
-	return commandList;
-}
-
-wrl::ComPtr<ID3D12Fence> Engine::Graphics::createFence()
-{
-	wrl::ComPtr<ID3D12Fence> fence;
-
-	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)));
-	
-	return fence;
-}
-
-HANDLE Engine::Graphics::createFenceEvent()
-{
-	HANDLE handleEvent;
-
-	handleEvent = ::CreateEvent(NULL, FALSE, FALSE, NULL);
-	if (handleEvent == NULL) {
-		ThrowException("Failed to create windows event");
-	}
-
-	return handleEvent;
-}
-
-uint64_t Engine::Graphics::signal()
-{
-	HRESULT hr;
-	GFXTHROWIFFAILED(pCommandQueue->Signal(pFence.Get(), ++fenceValue));
-	return frameFenceValues[pCurrentBackBufferIndex] = fenceValue;
-}
-
-void Engine::Graphics::waitForFenceValue()
-{
-	using namespace std::chrono;
-	milliseconds d = milliseconds::max();
-	if (pFence->GetCompletedValue() < frameFenceValues[pCurrentBackBufferIndex]) {
-		HRESULT hr;
-		GFXTHROWIFFAILED(pFence->SetEventOnCompletion(frameFenceValues[pCurrentBackBufferIndex], fenceEvent));
-		::WaitForSingleObject(fenceEvent, d.count());
-	}
-}
-
 void Engine::Graphics::createRenderTargetViews()
 {
 	pRTVDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -407,12 +308,6 @@ void Engine::Graphics::createRenderTargetViews()
 		ThrowDxgiInfoExceptionIfFailed(pDevice->CreateRenderTargetView(pBackBuffers[i].Get(), nullptr, rtvHandle));
 		rtvHandle.Offset(pRTVDescriptorSize);
 	}
-}
-
-void Engine::Graphics::flush()
-{
-	signal();
-	waitForFenceValue();
 }
 
 wrl::ComPtr<IDXGIAdapter4> Engine::Graphics::getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp)

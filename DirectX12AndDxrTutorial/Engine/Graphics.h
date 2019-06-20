@@ -6,13 +6,13 @@
 #include <dxgi1_6.h>
 #include <DirectXMath.h>
 #include <wrl/client.h>
+#include <vector>
+#include <memory>
 
 #include "DxgiInfoManager.h"
 
 #include "../Exception/WindowException.h"
-
-#include <vector>
-#include <memory>
+#include "CommandQueue.h"
 
 namespace Engine {
 
@@ -43,20 +43,10 @@ namespace Engine {
 		bool checkTearingSupport();
 
 		Microsoft::WRL::ComPtr<IDXGIFactory7> createFactory();
-		Microsoft::WRL::ComPtr<ID3D12CommandQueue> createCommandQueue(D3D12_COMMAND_LIST_TYPE listType);
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> createSwapChain(HWND hWnd);
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, UINT numDescriptors);
-		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> createCommandAllocator();
-		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> createCommandList();
-		Microsoft::WRL::ComPtr<ID3D12Fence> createFence();
-		HANDLE createFenceEvent();
-		uint64_t signal();
-		void waitForFenceValue();
-
+		
 		void createRenderTargetViews();
-
-		void flush();
-
 
 		Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp = false);
 
@@ -64,7 +54,9 @@ namespace Engine {
 		int winWidth, winHeight;
 
 		Microsoft::WRL::ComPtr<ID3D12Device5> pDevice;
-		Microsoft::WRL::ComPtr<ID3D12CommandQueue> pCommandQueue;
+		std::unique_ptr<CommandQueue> pCommandQueue;
+		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> pCurrentCommandList;
+
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwap;
 
 		// Heaps are similar to views in DirectX11 - essentially a list of views?
@@ -74,23 +66,11 @@ namespace Engine {
 		// Tracks the backbuffers used in the swapchain
 		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[2];
 
-		// Submit this to the command queue
-		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> pCommandList;
-
-		// Command allocators - only use one per in-flight render frame
-		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> pCommandAllocators[2];
-
 		BOOL tearingSupported;
 
 		UINT pRTVDescriptorSize;
-		UINT pCurrentBackBufferIndex = 0;
-
-
-		// Synchronization objects
-		Microsoft::WRL::ComPtr<ID3D12Fence> pFence;
-		uint64_t fenceValue = 0;
-		uint64_t frameFenceValues[2] = {};
-		HANDLE fenceEvent;
+		UINT pCurrentBackBufferIndex;
+		uint64_t frameFenceValues[2];
 	};
 
 }

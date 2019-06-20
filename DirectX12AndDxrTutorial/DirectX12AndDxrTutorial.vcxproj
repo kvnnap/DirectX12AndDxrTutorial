@@ -160,6 +160,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="App.cpp" />
+    <ClCompile Include="Engine\CommandQueue.cpp" />
     <ClCompile Include="Engine\DxgiInfoManager.cpp" />
     <ClCompile Include="Engine\Graphics.cpp" />
     <ClCompile Include="Exception\DxgiInfoException.cpp" />
@@ -178,6 +179,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="App.h" />
+    <ClInclude Include="Engine\CommandQueue.h" />
     <ClInclude Include="Engine\DxgiInfoManager.h" />
     <ClInclude Include="Engine\Graphics.h" />
     <ClInclude Include="Exception\DxgiInfoException.h" />
