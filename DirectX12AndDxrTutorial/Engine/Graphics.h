@@ -13,6 +13,7 @@
 
 #include "../Exception/WindowException.h"
 #include "CommandQueue.h"
+#include "Camera.h"
 
 namespace Engine {
 
@@ -47,6 +48,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, UINT numDescriptors);
 		
 		void createRenderTargetViews();
+		void createDepthStencilView();
 
 		Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp = false);
 
@@ -61,6 +63,7 @@ namespace Engine {
 
 		// Heaps are similar to views in DirectX11 - essentially a list of views?
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pDescriptorHeap;
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pDepthDescriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
 
 		// Tracks the backbuffers used in the swapchain
@@ -69,8 +72,28 @@ namespace Engine {
 		BOOL tearingSupported;
 
 		UINT pRTVDescriptorSize;
+		UINT pDSVDescriptorSize;
 		UINT pCurrentBackBufferIndex;
 		uint64_t frameFenceValues[2];
+
+		// Depth buffer
+		Microsoft::WRL::ComPtr<ID3D12Resource> pDepthBuffers[2];
+
+		// Temporary triangle stuff here
+		D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
+		Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
+
+		// Root signature
+		Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
+
+		// Pipeline state object.
+		Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+
+		D3D12_RECT scissorRect;
+		D3D12_VIEWPORT viewport;
+
+		std::unique_ptr<Camera> camera;
+		
 	};
 
 }

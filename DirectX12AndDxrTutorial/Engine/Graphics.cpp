@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iostream>
 #include <d3dcompiler.h>
+#include <DirectXMath.h>
 #include "Libraries/d3dx12.h"
 
 
@@ -24,7 +25,8 @@ using namespace std;
 using namespace Engine;
 
 Graphics::Graphics(HWND hWnd)
-	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{}
+	: winWidth(), winHeight(), pRTVDescriptorSize(), pDSVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
+	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport()
 {
 	HRESULT hr;
 
@@ -32,6 +34,8 @@ Graphics::Graphics(HWND hWnd)
 	GetClientRect(hWnd, &rect);
 	winWidth = rect.right;
 	winHeight = rect.bottom;
+
+	viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, static_cast<float>(winWidth), static_cast<float>(winHeight));
 
 	// Enable debugging
 	enableDebugLayer();
@@ -78,8 +82,21 @@ Graphics::Graphics(HWND hWnd)
 	// Create render target Views
 	createRenderTargetViews();
 
+	// And for depth stencil view
+	pDepthDescriptorHeap = createDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, std::size(pBackBuffers));
+	createDepthStencilView();
+
 	// Save tearing support
 	tearingSupported = checkTearingSupport();
+
+	// Init camera
+	camera = make_unique<Camera>(
+		dx::XMVectorSet(0.f, 0.f, -5.f, 1.f),
+		dx::XMVectorSet(0.f, 0.f, 1.f, 0.f),
+		(float)winWidth / winHeight,
+		1.0f,
+		1.f,
+		10.f);
 
 	// Setup ImGui - TODO DX12
 	/*bool valid = IMGUI_CHECKVERSION();
@@ -117,15 +134,169 @@ void Graphics::clearBuffer(float red, float green, float blue)
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
 	FLOAT color[] = { red, green, blue, 1.0f };
 	pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
+
+	// Clear depth buffer
+	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle(pDepthDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pDSVDescriptorSize);
+	pCurrentCommandList->ClearDepthStencilView(dsvDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 }
 
 void Engine::Graphics::init()
 {
-	
+	// Let's draw a triangle.. 
+	// Vertex data for a colored cube.
+	struct VertexPosColor
+	{
+		DirectX::XMFLOAT3 Position;
+		DirectX::XMFLOAT3 Color;
+	};
+
+	VertexPosColor vertices[] = {
+		{DirectX::XMFLOAT3(-1.f, 1.f, 0.f), DirectX::XMFLOAT3(1.f, 0.f, 0.f)},
+		{DirectX::XMFLOAT3( 1.f,-1.f, 0.f), DirectX::XMFLOAT3(0.f, 1.f, 0.f)},
+		{DirectX::XMFLOAT3(-1.f,-1.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)}
+	};
+
+	HRESULT hr;
+	GFXTHROWIFFAILED(pDevice->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(vertices)),
+		D3D12_RESOURCE_STATE_COPY_DEST,
+		nullptr,
+		IID_PPV_ARGS(&vertexBuffer)
+	));
+
+
+	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
+	GFXTHROWIFFAILED(pDevice->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(vertices)),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&intermediateBuffer)
+	));
+
+	D3D12_SUBRESOURCE_DATA subresourceData = {};
+	subresourceData.pData = vertices;
+	subresourceData.RowPitch = sizeof(vertices);
+	subresourceData.SlicePitch = subresourceData.RowPitch;
+
+	auto commandList = pCommandQueue->getCommandList();
+
+	// Upload vertices using intermediate upload heap - using helper method
+	UpdateSubresources(
+		commandList.Get(),
+		vertexBuffer.Get(),
+		intermediateBuffer.Get(),
+		0, 0, 1, &subresourceData
+	);
+
+	// setup vertex buffer view
+	vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
+	vertexBufferView.SizeInBytes = sizeof(vertices);
+	vertexBufferView.StrideInBytes = sizeof(VertexPosColor);
+
+	// Load shaders
+	wrl::ComPtr<ID3DBlob> pVertexShaderBlob;
+	GFXTHROWIFFAILED(D3DReadFileToBlob(L"./Shaders/VertexShader.cso", &pVertexShaderBlob));
+
+	wrl::ComPtr<ID3DBlob> pPixelShaderBlob;
+	GFXTHROWIFFAILED(D3DReadFileToBlob(L"./Shaders/PixelShader.cso", &pPixelShaderBlob));
+
+	// Input Assembler config
+	D3D12_INPUT_ELEMENT_DESC ied[] = {
+		{ "Position", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "Color", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+	};
+
+	// Root signature
+	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
+	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+	if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
+	{
+		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+	}
+
+	// Allow input layout and deny unnecessary access to certain pipeline stages.
+	D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags =
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+		D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
+
+	// A single 32-bit constant root parameter that is used by the vertex shader.
+	CD3DX12_ROOT_PARAMETER1 rootParameters[1] = {};
+	rootParameters[0].InitAsConstants(sizeof(DirectX::XMMATRIX) / 4, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
+
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDescription;
+	rootSignatureDescription.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, rootSignatureFlags);
+
+	// Serialize the root signature.
+	wrl::ComPtr<ID3DBlob> rootSignatureBlob;
+	wrl::ComPtr<ID3DBlob> errorBlob;
+	GFXTHROWIFFAILED(D3DX12SerializeVersionedRootSignature(&rootSignatureDescription,
+		featureData.HighestVersion, &rootSignatureBlob, &errorBlob));
+	// Create the root signature.
+	GFXTHROWIFFAILED(pDevice->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(),
+		rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+
+	// Setup pipeline
+	struct PipelineStateStream
+	{
+		CD3DX12_PIPELINE_STATE_STREAM_ROOT_SIGNATURE pRootSignature;
+		CD3DX12_PIPELINE_STATE_STREAM_INPUT_LAYOUT InputLayout;
+		CD3DX12_PIPELINE_STATE_STREAM_PRIMITIVE_TOPOLOGY PrimitiveTopologyType;
+		CD3DX12_PIPELINE_STATE_STREAM_VS VS;
+		CD3DX12_PIPELINE_STATE_STREAM_PS PS;
+		CD3DX12_PIPELINE_STATE_STREAM_DEPTH_STENCIL_FORMAT DSVFormat;
+		CD3DX12_PIPELINE_STATE_STREAM_RENDER_TARGET_FORMATS RTVFormats;
+	} pipelineStateStream;
+
+	D3D12_RT_FORMAT_ARRAY rtvFormats = {};
+	rtvFormats.NumRenderTargets = 1;
+	rtvFormats.RTFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	pipelineStateStream.pRootSignature = rootSignature.Get();
+	pipelineStateStream.InputLayout = { ied, std::size(ied) };
+	pipelineStateStream.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	pipelineStateStream.VS = CD3DX12_SHADER_BYTECODE(pVertexShaderBlob.Get());
+	pipelineStateStream.PS = CD3DX12_SHADER_BYTECODE(pPixelShaderBlob.Get());
+	pipelineStateStream.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	pipelineStateStream.RTVFormats = rtvFormats;
+
+	D3D12_PIPELINE_STATE_STREAM_DESC pipelineStateStreamDesc = {
+		sizeof(PipelineStateStream), &pipelineStateStream
+	};
+	GFXTHROWIFFAILED(pDevice->CreatePipelineState(&pipelineStateStreamDesc, IID_PPV_ARGS(&pipelineState)));
+
+
+	pCommandQueue->executeCommandList(commandList);
+	pCommandQueue->flush();
 }
 
 void Graphics::draw(uint64_t timeMs, float zTrans)
 {
+	pCurrentCommandList->SetPipelineState(pipelineState.Get());
+	pCurrentCommandList->SetGraphicsRootSignature(rootSignature.Get());
+
+	pCurrentCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pCurrentCommandList->IASetVertexBuffers(0u, 1u, &vertexBufferView);
+
+	pCurrentCommandList->RSSetScissorRects(1u, &scissorRect);
+	pCurrentCommandList->RSSetViewports(1u, &viewport);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle(pDepthDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pDSVDescriptorSize);
+	pCurrentCommandList->OMSetRenderTargets(1u, &rtvDescriptorHandle, FALSE, &dsvDescriptorHandle);
+
+
+	// Update the MVP matrix
+	DirectX::XMMATRIX mvpMatrix = camera->getViewPerspectiveMatrix();
+	pCurrentCommandList->SetGraphicsRoot32BitConstants(0u, sizeof(dx::XMMATRIX) / 4, &mvpMatrix, 0u);
+
+	pCurrentCommandList->DrawInstanced(3u, 1u, 0u, 0u);
 	// Start the Dear ImGui frame
 	//ImGui_ImplDX12_NewFrame();
 	//ImGui_ImplWin32_NewFrame();
@@ -307,6 +478,40 @@ void Engine::Graphics::createRenderTargetViews()
 		GFXTHROWIFFAILED(pSwap->GetBuffer(i, IID_PPV_ARGS(&pBackBuffers[i])));
 		ThrowDxgiInfoExceptionIfFailed(pDevice->CreateRenderTargetView(pBackBuffers[i].Get(), nullptr, rtvHandle));
 		rtvHandle.Offset(pRTVDescriptorSize);
+	}
+}
+
+void Engine::Graphics::createDepthStencilView()
+{
+	pDSVDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(pDepthDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	
+	D3D12_CLEAR_VALUE clearValue = {};
+	clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+	clearValue.DepthStencil.Depth = 1.f;
+	clearValue.DepthStencil.Stencil = 0;
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {};
+	dsv.Format = DXGI_FORMAT_D32_FLOAT;
+	dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsv.Texture2D.MipSlice = 0;
+	dsv.Flags = D3D12_DSV_FLAG_NONE;
+
+	HRESULT hr;
+	for (int i = 0; i < std::size(pBackBuffers); ++i) {
+		// Create depth buffer
+		GFXTHROWIFFAILED(pDevice->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, winWidth, winHeight, 1u, 0u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+			D3D12_RESOURCE_STATE_DEPTH_WRITE,
+			&clearValue,
+			IID_PPV_ARGS(&pDepthBuffers[i])
+		));
+
+		// Create view for resource
+		ThrowDxgiInfoExceptionIfFailed(pDevice->CreateDepthStencilView(pDepthBuffers[i].Get(), &dsv, dsvHandle));
+		dsvHandle.Offset(pDSVDescriptorSize);
 	}
 }
 
