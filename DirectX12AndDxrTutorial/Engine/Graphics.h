@@ -39,19 +39,6 @@ namespace Engine {
 
 	private:
 
-		void enableDebugLayer();
-		void setupDebugLayer();
-		bool checkTearingSupport();
-
-		Microsoft::WRL::ComPtr<IDXGIFactory7> createFactory();
-		Microsoft::WRL::ComPtr<IDXGISwapChain4> createSwapChain(HWND hWnd);
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, UINT numDescriptors);
-		
-		void createRenderTargetViews();
-		void createDepthStencilView();
-
-		Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp = false);
-
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
 
