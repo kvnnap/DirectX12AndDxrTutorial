@@ -145,26 +145,9 @@ void Engine::Graphics::init()
 		{DirectX::XMFLOAT3(-1.f,-1.f, 0.f), DirectX::XMFLOAT3(0.f, 0.f, 1.f)}
 	};
 
-	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(vertices)),
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&vertexBuffer)
-	));
-
-
-	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
-	GFXTHROWIFFAILED(pDevice->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(sizeof(vertices)),
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&intermediateBuffer)
-	));
+	vertexBuffer = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(vertices), D3D12_RESOURCE_STATE_COPY_DEST);
+	
+	wrl::ComPtr<ID3D12Resource> intermediateBuffer = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, sizeof(vertices), D3D12_RESOURCE_STATE_GENERIC_READ);
 
 	D3D12_SUBRESOURCE_DATA subresourceData = {};
 	subresourceData.pData = vertices;
@@ -185,6 +168,8 @@ void Engine::Graphics::init()
 	vertexBufferView.BufferLocation = vertexBuffer->GetGPUVirtualAddress();
 	vertexBufferView.SizeInBytes = sizeof(vertices);
 	vertexBufferView.StrideInBytes = sizeof(VertexPosColor);
+	
+	HRESULT hr;
 
 	// Load shaders
 	wrl::ComPtr<ID3DBlob> pVertexShaderBlob;
@@ -199,7 +184,7 @@ void Engine::Graphics::init()
 		{ "Color", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 	};
 
-	// Root signature
+	// Root signature - https://docs.microsoft.com/en-us/windows/desktop/direct3d12/root-signatures-overview
 	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
 	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
 	if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
@@ -231,7 +216,7 @@ void Engine::Graphics::init()
 	GFXTHROWIFFAILED(pDevice->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(),
 		rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
 
-	// Setup pipeline
+	// Setup pipeline - TYPE info is contained within each property in the struct!
 	struct PipelineStateStream
 	{
 		CD3DX12_PIPELINE_STATE_STREAM_ROOT_SIGNATURE pRootSignature;

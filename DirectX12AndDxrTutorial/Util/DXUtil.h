@@ -34,5 +34,7 @@ namespace Util
 			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> depthDescriptorHeap,
 			UINT winWidth, UINT winHeight,
 			UINT numDSV);
+
+		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState);
 	};
 }

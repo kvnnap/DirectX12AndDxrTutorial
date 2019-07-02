@@ -252,3 +252,20 @@ std::vector<wrl::ComPtr<ID3D12Resource>> Util::DXUtil::createDepthStencilView(
 
 	return depthBuffers;
 }
+
+wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState)
+{
+	wrl::ComPtr<ID3D12Resource> buffer;
+	
+	HRESULT hr;
+	GFXTHROWIFFAILED(device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(heapType),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(size),
+		resourceState,
+		nullptr,
+		IID_PPV_ARGS(&buffer)
+	));
+
+	return buffer;
+}
