@@ -18,8 +18,8 @@ namespace Engine {
 		virtual ~CommandQueue();
 
 		Microsoft::WRL::ComPtr<ID3D12CommandQueue> getCommandQueue() const;
-		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> getCommandList();
-		std::uint64_t executeCommandList(Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList);
+		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> getCommandList();
+		std::uint64_t executeCommandList(Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> commandList);
 		std::uint64_t signal();
 		bool isFenceComplete(std::uint64_t fenceValue);
 		void waitForFenceValue(std::uint64_t fenceValue);
@@ -29,7 +29,7 @@ namespace Engine {
 
 	protected:
 		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> createCommandAllocator();
-		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> createCommandList(Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator);
+		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> createCommandList(Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator);
 
 	private:
 
@@ -39,7 +39,7 @@ namespace Engine {
 		};
 
 		using CommandAllocatorQueue = std::queue<CommandAllocatorEntry>;
-		using CommandListQueue = std::queue<Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>>;
+		using CommandListQueue = std::queue<Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4>>;
 
 		//Data
 		D3D12_COMMAND_LIST_TYPE listType;

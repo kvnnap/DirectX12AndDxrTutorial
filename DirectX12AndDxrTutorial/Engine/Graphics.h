@@ -46,7 +46,7 @@ namespace Engine {
 
 		Microsoft::WRL::ComPtr<ID3D12Device5> pDevice;
 		std::unique_ptr<CommandQueue> pCommandQueue;
-		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> pCurrentCommandList;
+		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList;
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwap;
 

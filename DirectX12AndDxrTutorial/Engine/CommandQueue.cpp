@@ -35,12 +35,12 @@ Microsoft::WRL::ComPtr<ID3D12CommandQueue> Engine::CommandQueue::getCommandQueue
 	return pCommandQueue;
 }
 
-wrl::ComPtr<ID3D12GraphicsCommandList> Engine::CommandQueue::getCommandList()
+wrl::ComPtr<ID3D12GraphicsCommandList4> Engine::CommandQueue::getCommandList()
 {
 	HRESULT hr;
 
 	wrl::ComPtr<ID3D12CommandAllocator> commandAllocator;
-	wrl::ComPtr<ID3D12GraphicsCommandList> commandList;
+	wrl::ComPtr<ID3D12GraphicsCommandList4> commandList;
 
 	// Grab a command allocator
 	if (!commandAllocatorQueue.empty() && isFenceComplete(commandAllocatorQueue.front().fenceValue)) {
@@ -69,7 +69,7 @@ wrl::ComPtr<ID3D12GraphicsCommandList> Engine::CommandQueue::getCommandList()
 	return commandList;
 }
 
-std::uint64_t Engine::CommandQueue::executeCommandList(wrl::ComPtr<ID3D12GraphicsCommandList> commandList)
+std::uint64_t Engine::CommandQueue::executeCommandList(wrl::ComPtr<ID3D12GraphicsCommandList4> commandList)
 {
 	HRESULT hr;
 	GFXTHROWIFFAILED(commandList->Close());
@@ -138,11 +138,11 @@ wrl::ComPtr<ID3D12CommandAllocator> Engine::CommandQueue::createCommandAllocator
 	return commandAllocator;
 }
 
-wrl::ComPtr<ID3D12GraphicsCommandList> Engine::CommandQueue::createCommandList(wrl::ComPtr<ID3D12CommandAllocator> commandAllocator)
+wrl::ComPtr<ID3D12GraphicsCommandList4> Engine::CommandQueue::createCommandList(wrl::ComPtr<ID3D12CommandAllocator> commandAllocator)
 {
 	HRESULT hr;
 
-	wrl::ComPtr<ID3D12GraphicsCommandList> commandList;
+	wrl::ComPtr<ID3D12GraphicsCommandList4> commandList;
 	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, listType, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
 	return commandList;
 }
