@@ -134,7 +134,7 @@ wrl::ComPtr<ID3D12CommandAllocator> Engine::CommandQueue::createCommandAllocator
 	HRESULT hr;
 
 	wrl::ComPtr<ID3D12CommandAllocator> commandAllocator;
-	GFXTHROWIFFAILED(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)));
+	GFXTHROWIFFAILED(pDevice->CreateCommandAllocator(listType, IID_PPV_ARGS(&commandAllocator)));
 	return commandAllocator;
 }
 
@@ -143,6 +143,6 @@ wrl::ComPtr<ID3D12GraphicsCommandList> Engine::CommandQueue::createCommandList(w
 	HRESULT hr;
 
 	wrl::ComPtr<ID3D12GraphicsCommandList> commandList;
-	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
+	GFXTHROWIFFAILED(pDevice->CreateCommandList(0, listType, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
 	return commandList;
 }

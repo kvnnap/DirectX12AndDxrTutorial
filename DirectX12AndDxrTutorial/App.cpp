@@ -1,5 +1,7 @@
 #include "App.h"
 #include "Exception/Exception.h"
+#include "Engine/Graphics.h"
+#include "Engine/RTGraphics.h"
 
 #include <Windows.h>
 #include <string>
@@ -23,8 +25,8 @@ int App::execute() noexcept
 	{
 		keyboard = make_unique<Keyboard>();
 		window = make_unique<Window>("DX12 & DXR Tutorial", 640, 480, keyboard.get());
-		graphics = make_unique<Engine::Graphics>(window->getHandle());
-		graphics->init();
+		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
+		renderer->init();
 
 		//window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 
@@ -66,7 +68,7 @@ void App::processFrame()
 	long long deltaMs = msec == 0 ? 0 : msLong - msec;
 	msec = msLong;
 
-	graphics->clearBuffer(
+	renderer->clearBuffer(
 		keyboard->isKeyPressed('R') ? 1.f : 0.f,
 		keyboard->isKeyPressed('G') ? 1.f : 0.f,
 		keyboard->isKeyPressed('B') ? 1.f : 0.f);
@@ -83,9 +85,9 @@ void App::processFrame()
 	camera.incrementDirection(getValueIfPressed('J', -deltaUnits), getValueIfPressed('K', deltaUnits));
 
 	*/
-	graphics->draw(msLong);
+	renderer->draw(msLong);
 
-	graphics->endFrame();
+	renderer->endFrame();
 
 	//// run game code
 

@@ -1,5 +1,3 @@
-#pragma once
-
 #define NOMINMAX
 #include <Windows.h>
 #include <d3d12.h>
@@ -17,29 +15,23 @@
 #include "IRenderer.h"
 
 namespace Engine {
-
-	class Graphics
+	class RTGraphics 
 		: public IRenderer
 	{
 	public:
-		Graphics(HWND hWnd);
-		Graphics(const Graphics&) = delete;
-		Graphics& operator=(const Graphics&) = delete;
-		virtual ~Graphics();
+		RTGraphics(HWND hWnd);
+		RTGraphics(const RTGraphics&) = delete;
+		RTGraphics& operator=(const RTGraphics&) = delete;
+		virtual ~RTGraphics();
 
 		void clearBuffer(float red, float green, float blue) override;
 		void init() override;
 		void draw(uint64_t timeMs = 0) override;
 		void endFrame() override;
 
-		void simpleDraw(uint64_t timeMs = 0);
-		int getWinWidth() const;
-		int getWinHeight() const;
-
-		Microsoft::WRL::ComPtr<ID3D12Device5>& getDevice();
-		DxgiInfoManager& getInfoManager();
-
 	private:
+
+		static const UINT numBackBuffers = 2;
 
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
@@ -48,25 +40,22 @@ namespace Engine {
 		std::unique_ptr<CommandQueue> pCommandQueue;
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> pCurrentCommandList;
 
-		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwap;
+		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwapChain;
 
 		// Heaps are similar to views in DirectX11 - essentially a list of views?
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pDescriptorHeap;
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pRTVDescriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pDepthDescriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
 
 		// Tracks the backbuffers used in the swapchain
-		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[2];
+		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
 
 		BOOL tearingSupported;
 
 		UINT pRTVDescriptorSize;
 		UINT pDSVDescriptorSize;
 		UINT pCurrentBackBufferIndex;
-		uint64_t frameFenceValues[2];
-
-		// Depth buffer
-		Microsoft::WRL::ComPtr<ID3D12Resource> pDepthBuffers[2];
+		uint64_t frameFenceValues[numBackBuffers];
 
 		// Temporary triangle stuff here
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
@@ -82,7 +71,5 @@ namespace Engine {
 		D3D12_VIEWPORT viewport;
 
 		std::unique_ptr<Camera> camera;
-		
 	};
-
 }

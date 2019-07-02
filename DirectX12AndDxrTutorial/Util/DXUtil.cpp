@@ -269,3 +269,18 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 
 	return buffer;
 }
+
+
+wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel)
+{
+	HRESULT hr;
+	wrl::ComPtr<ID3D12Device5> pDevice = createDeviceFromAdapter(adapter, featureLevel);
+
+	D3D12_FEATURE_DATA_D3D12_OPTIONS5 features5 = {};
+	GFXTHROWIFFAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &features5, sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5)));
+	if (features5.RaytracingTier == D3D12_RAYTRACING_TIER_NOT_SUPPORTED) {
+		ThrowException("Ray tracing is not supported on this device");
+	}
+
+	return pDevice;
+}

@@ -1,6 +1,6 @@
 #include "Window/Window.h"
 #include "IO/Keyboard.h"
-#include "Engine/Graphics.h"
+#include "Engine/IRenderer.h"
 
 #include <memory>
 
@@ -25,6 +25,6 @@ private:
 
 	std::unique_ptr<UI::Window> window;
 	std::unique_ptr<IO::Keyboard> keyboard;
-	std::unique_ptr<Engine::Graphics> graphics;
+	std::unique_ptr<Engine::IRenderer> renderer;
 };
 

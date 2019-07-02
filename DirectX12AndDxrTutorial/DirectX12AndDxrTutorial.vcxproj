@@ -160,6 +160,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="App.cpp" />
+    <ClCompile Include="Engine\RTGraphics.cpp" />
     <ClCompile Include="Util\DXUtil.cpp" />
     <ClCompile Include="Engine\Camera.cpp" />
     <ClCompile Include="Engine\CommandQueue.cpp" />
@@ -181,6 +182,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="App.h" />
+    <ClInclude Include="Engine\IRenderer.h" />
+    <ClInclude Include="Engine\RTGraphics.h" />
     <ClInclude Include="Util\DXUtil.h" />
     <ClInclude Include="Engine\Camera.h" />
     <ClInclude Include="Engine\CommandQueue.h" />

@@ -250,7 +250,7 @@ void Engine::Graphics::init()
 	pCommandQueue->flush();
 }
 
-void Graphics::draw(uint64_t timeMs, float zTrans)
+void Graphics::draw(uint64_t timeMs)
 {
 	pCurrentCommandList->SetPipelineState(pipelineState.Get());
 	pCurrentCommandList->SetGraphicsRootSignature(rootSignature.Get());

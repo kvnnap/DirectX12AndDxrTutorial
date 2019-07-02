@@ -36,5 +36,9 @@ namespace Util
 			UINT numDSV);
 
 		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState);
+
+		// RT Stuff
+		static Microsoft::WRL::ComPtr<ID3D12Device5> createRTDeviceFromAdapter(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel);
+
 	};
 }
