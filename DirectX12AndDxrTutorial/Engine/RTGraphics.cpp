@@ -3,6 +3,8 @@
 #include "../Util/DXUtil.h"
 
 #include <chrono>
+#include <array>
+#include <vector>
 #include <iostream>
 #include <d3dcompiler.h>
 #include <DirectXMath.h>
@@ -111,6 +113,8 @@ void Engine::RTGraphics::init()
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
 	tlasBuffers = DXUtil::createTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer);
 
+	pStateObject = createRtPipeline(pDevice);
+
 	pCommandQueue->executeCommandList(commandList);
 	pCommandQueue->flush();
 }
@@ -154,3 +158,36 @@ void Engine::RTGraphics::endFrame()
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 }
+
+wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice)
+{
+	HRESULT hr;
+
+	// Define State Object Descriptor (EXTENDED version from d3dx)
+	CD3DX12_STATE_OBJECT_DESC stateObjectDesc(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
+
+	// Construct sub objects
+
+	// First is DXIL - to load shader and Load symbols from the shader and identify the entry points
+	wrl::ComPtr<ID3DBlob> pRTShadersBlob;
+	GFXTHROWIFFAILED(D3DReadFileToBlob(L"./Shaders/RTShaders.cso", &pRTShadersBlob));
+	CD3DX12_DXIL_LIBRARY_SUBOBJECT dxilSubObject (stateObjectDesc);
+	dxilSubObject.SetDXILLibrary(&CD3DX12_SHADER_BYTECODE(pRTShadersBlob.Get()));
+	const WCHAR* entryPoints[] = { L"rayGen", L"miss", L"chs" };
+	dxilSubObject.DefineExports(entryPoints);
+
+	// Second - Hit Program - link to entry point names
+	CD3DX12_HIT_GROUP_SUBOBJECT hitSubObject (stateObjectDesc);
+	hitSubObject.SetClosestHitShaderImport(L"chs");
+	hitSubObject.SetHitGroupExport(L"HitGtoup");
+
+	// Third - Local Root Signature
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT localRootSignatureSubObject(stateObjectDesc);
+	//localRootSignatureSubObject.SetRootSignature()
+
+	wrl::ComPtr<ID3D12StateObject> stateObject;
+	GFXTHROWIFFAILED(pDevice->CreateStateObject(stateObjectDesc, IID_PPV_ARGS(&stateObject)));
+
+	return stateObject;
+}
+
