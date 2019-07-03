@@ -1,3 +1,5 @@
+#pragma once
+
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -35,10 +37,20 @@ namespace Util
 			UINT winWidth, UINT winHeight,
 			UINT numDSV);
 
-		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState);
+		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
 
 		// RT Stuff
 		static Microsoft::WRL::ComPtr<ID3D12Device5> createRTDeviceFromAdapter(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel);
 
+		struct AccelerationStructureBuffers {
+			Microsoft::WRL::ComPtr<ID3D12Resource> pScratch;
+			Microsoft::WRL::ComPtr<ID3D12Resource> pResult;
+			Microsoft::WRL::ComPtr<ID3D12Resource> pInstanceDesc; // For top-level AS
+		};
+
+		// Vertex buffer must be in a readable state
+		// The bottom level AS deals with objects at the local level
+		static AccelerationStructureBuffers createBottomLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> pVertexBuffer, UINT numVertices, UINT vertexSize);
+		static AccelerationStructureBuffers createTopLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer, Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer);
 	};
 }

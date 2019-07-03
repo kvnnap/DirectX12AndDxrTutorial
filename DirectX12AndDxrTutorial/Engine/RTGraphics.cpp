@@ -28,7 +28,7 @@ using namespace Util;
 using namespace Engine;
 
 RTGraphics::RTGraphics(HWND hWnd)
-	: winWidth(), winHeight(), pRTVDescriptorSize(), pDSVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
+	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
 	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport()
 {
 	HRESULT hr;
@@ -103,28 +103,16 @@ void Engine::RTGraphics::init()
 		0, 0, 1, &subresourceData
 	);
 
+	// Change vertexBuffer state so that it can be read for acceleration structure construction
+	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	commandList->ResourceBarrier(1, &barrier);
+
+	blasBuffers = DXUtil::createBottomLevelAS(pDevice, commandList, vertexBuffer, 1u, sizeof(dx::XMFLOAT3));
+	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
+	tlasBuffers = DXUtil::createTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer);
+
 	pCommandQueue->executeCommandList(commandList);
 	pCommandQueue->flush();
-
-	// Acceleration Structure setup - describes our geometry (similar to ied)
-	D3D12_RAYTRACING_GEOMETRY_DESC geometryDescriptor = {};
-	geometryDescriptor.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometryDescriptor.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-	geometryDescriptor.Triangles.VertexBuffer.StartAddress = vertexBuffer->GetGPUVirtualAddress();
-	geometryDescriptor.Triangles.VertexBuffer.StrideInBytes = sizeof(dx::XMFLOAT3);
-	geometryDescriptor.Triangles.VertexCount = std::size(triangle);
-	geometryDescriptor.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-
-	// Bottom level?
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
-	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	rtStructureDescriptor.NumDescs = 1;
-	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-	rtStructureDescriptor.pGeometryDescs = &geometryDescriptor;
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
-	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&rtStructureDescriptor, &prebuildInfo);
 }
 
 void Engine::RTGraphics::clearBuffer(float red, float green, float blue)

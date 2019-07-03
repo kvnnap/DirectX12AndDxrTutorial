@@ -4,6 +4,9 @@
 #include "../Exception/DxgiInfoException.h"
 #include "../Libraries/d3dx12.h"
 
+#include <DirectXMath.h>
+#include "Libraries/d3dx12.h"
+
 #include <iostream>
 
 namespace wrl = Microsoft::WRL;
@@ -253,7 +256,7 @@ std::vector<wrl::ComPtr<ID3D12Resource>> Util::DXUtil::createDepthStencilView(
 	return depthBuffers;
 }
 
-wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState)
+wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags)
 {
 	wrl::ComPtr<ID3D12Resource> buffer;
 	
@@ -261,7 +264,7 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 	GFXTHROWIFFAILED(device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(heapType),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(size),
+		&CD3DX12_RESOURCE_DESC::Buffer(size, resourceFlags),
 		resourceState,
 		nullptr,
 		IID_PPV_ARGS(&buffer)
@@ -269,7 +272,6 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 
 	return buffer;
 }
-
 
 wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel)
 {
@@ -283,4 +285,100 @@ wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<I
 	}
 
 	return pDevice;
+}
+
+DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> pVertexBuffer, UINT numVertices, UINT vertexSize)
+{
+	AccelerationStructureBuffers blasBuffers;
+
+	// Acceleration Structure setup - describes our geometry (similar to ied)
+	D3D12_RAYTRACING_GEOMETRY_DESC geometryDescriptor = {};
+	geometryDescriptor.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+	geometryDescriptor.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+	geometryDescriptor.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetGPUVirtualAddress();
+	geometryDescriptor.Triangles.VertexBuffer.StrideInBytes = vertexSize;
+	geometryDescriptor.Triangles.VertexCount = numVertices;
+	geometryDescriptor.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+
+	// Bottom level?
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
+	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	rtStructureDescriptor.NumDescs = 1;
+	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+	rtStructureDescriptor.pGeometryDescs = &geometryDescriptor;
+
+	// Query the buffer sizes that we need to allocate
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
+	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&rtStructureDescriptor, &prebuildInfo);
+
+	// Create the buffers..
+	blasBuffers.pScratch = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	blasBuffers.pResult = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC blasDesc = {};
+	blasDesc.Inputs = rtStructureDescriptor;
+	blasDesc.DestAccelerationStructureData = blasBuffers.pResult->GetGPUVirtualAddress();
+	blasDesc.ScratchAccelerationStructureData = blasBuffers.pScratch->GetGPUVirtualAddress();
+	pCommandList->BuildRaytracingAccelerationStructure(&blasDesc, 0, nullptr);
+
+	return blasBuffers;
+}
+
+DXUtil::AccelerationStructureBuffers Util::DXUtil::createTopLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer, Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer)
+{
+	AccelerationStructureBuffers tlasBuffers;
+
+	// Query the buffer sizes that we need to allocate
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
+	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	rtStructureDescriptor.NumDescs = 1;
+	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+	
+	// Query the buffer sizes that we need to allocate
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
+	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&rtStructureDescriptor, &prebuildInfo);
+
+	// Create the buffers..
+	tlasBuffers.pScratch = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	tlasBuffers.pResult = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	D3D12_RAYTRACING_INSTANCE_DESC rtInstanceDesc = {};
+	rtInstanceDesc.InstanceID = 0;
+	rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
+	rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+	rtInstanceDesc.AccelerationStructure = blasBuffer->GetGPUVirtualAddress();
+	DirectX::XMMATRIX identity = DirectX::XMMatrixIdentity();
+	memcpy(rtInstanceDesc.Transform, &identity, sizeof(rtInstanceDesc.Transform));
+	rtInstanceDesc.InstanceMask = 0xFF;
+
+	// Upload ray tracing instance desc to GPU
+	tlasTempBuffer = createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_GENERIC_READ);
+	tlasBuffers.pInstanceDesc = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_COPY_DEST);
+	D3D12_SUBRESOURCE_DATA subresourceData = {};
+	subresourceData.pData = &rtInstanceDesc;
+	subresourceData.RowPitch = sizeof(rtInstanceDesc);
+	subresourceData.SlicePitch = subresourceData.RowPitch;
+	UpdateSubresources(pCommandList.Get(), tlasBuffers.pInstanceDesc.Get(), tlasTempBuffer.Get(), 0, 0, 1, &subresourceData);
+
+	// Change rt Desc buffer to D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE state
+	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(tlasBuffers.pInstanceDesc.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	pCommandList->ResourceBarrier(1, &barrier);
+
+	rtStructureDescriptor.InstanceDescs = tlasBuffers.pInstanceDesc->GetGPUVirtualAddress();
+
+	// Descriptor for building TLAS
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC tlasDesc = {};
+	tlasDesc.Inputs = rtStructureDescriptor;
+	tlasDesc.DestAccelerationStructureData = tlasBuffers.pResult->GetGPUVirtualAddress();
+	tlasDesc.ScratchAccelerationStructureData = tlasBuffers.pScratch->GetGPUVirtualAddress();
+
+	pCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
+
+	// Insert barrier for uav access..
+	CD3DX12_RESOURCE_BARRIER uaVbarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get());
+	pCommandList->ResourceBarrier(1, &uaVbarrier);
+
+	return tlasBuffers;
 }

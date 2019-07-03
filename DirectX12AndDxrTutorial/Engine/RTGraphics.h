@@ -1,3 +1,5 @@
+#pragma once
+
 #define NOMINMAX
 #include <Windows.h>
 #include <d3d12.h>
@@ -6,6 +8,8 @@
 #include <wrl/client.h>
 #include <vector>
 #include <memory>
+
+#include "Util/DXUtil.h"
 
 #include "DxgiInfoManager.h"
 
@@ -39,21 +43,17 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Device5> pDevice;
 		std::unique_ptr<CommandQueue> pCommandQueue;
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList;
+		Util::DXUtil::AccelerationStructureBuffers blasBuffers, tlasBuffers;
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwapChain;
 
 		// Heaps are similar to views in DirectX11 - essentially a list of views?
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pRTVDescriptorHeap;
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pDepthDescriptorHeap;
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
 
 		// Tracks the backbuffers used in the swapchain
 		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
 
-		BOOL tearingSupported;
-
 		UINT pRTVDescriptorSize;
-		UINT pDSVDescriptorSize;
 		UINT pCurrentBackBufferIndex;
 		uint64_t frameFenceValues[numBackBuffers];
 
