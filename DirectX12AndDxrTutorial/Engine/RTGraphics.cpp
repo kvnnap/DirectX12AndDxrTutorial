@@ -34,8 +34,6 @@ RTGraphics::RTGraphics(HWND hWnd)
 	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
 	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport()
 {
-	HRESULT hr;
-
 	RECT rect;
 	GetClientRect(hWnd, &rect);
 	winWidth = rect.right;
@@ -99,8 +97,10 @@ void Engine::RTGraphics::init()
 
 	pStateObject = createRtPipeline(pDevice);
 
+	createShaderResources();
+
 	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
-	pShadingTable = createShaderTable(pDevice, pStateObject, commandList, shaderTableTempBuffer);
+	pShadingTable = createShaderTable(pDevice, pStateObject, commandList, srvDescriptorHeap, shaderTableTempBuffer);
 
 	pCommandQueue->executeCommandList(commandList);
 	pCommandQueue->flush();
@@ -230,10 +230,34 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::W
 	return stateObject;
 }
 
+void Engine::RTGraphics::createShaderResources()
+{
+	// The output resource
+	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
+
+	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
+	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 2, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+
+	// Create the UAV descriptor first (needs to be same order as in root signature)
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; // In below, set it at the first location of this heap
+	pDevice->CreateUnorderedAccessView(outputRTTexture.Get(), nullptr, &uavDesc, srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	// Create the SRV descriptor in second place (following same order as in root signature)
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.RaytracingAccelerationStructure.Location = tlasBuffers.pResult->GetGPUVirtualAddress();
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
+}
+
 wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(
 	wrl::ComPtr<ID3D12Device5> pDevice,
 	wrl::ComPtr<ID3D12StateObject> pipelineStateObject,
 	wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+	wrl::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap,
 	wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
 {
 	// Extract the properties interface
@@ -259,6 +283,10 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(
 	for (const auto& program : programs) {
 		memcpy(buffer + i++ * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 	}
+
+	// Fill in Entry 0 Descriptor table entry
+	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
+	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
 
 	// Upload buffer to gpu
 	return DXUtil::uploadDataToDefaultHeap(pDevice, pCommandList, shaderTableTempResource, buffer, shaderTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

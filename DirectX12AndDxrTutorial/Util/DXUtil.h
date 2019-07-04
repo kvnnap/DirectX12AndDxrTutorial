@@ -38,9 +38,13 @@ namespace Util
 			UINT numDSV);
 
 		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
+		static Microsoft::WRL::ComPtr<ID3D12Resource> createTextureCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 width, UINT64 height, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
 		static Microsoft::WRL::ComPtr<ID3D12Resource> uploadDataToDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState);
 
 		static Microsoft::WRL::ComPtr<ID3D12RootSignature> createRootSignature(Microsoft::WRL::ComPtr<ID3D12Device5> device, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc);
+
+		// Maybe RT only?
+		static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible);
 
 		// RT Stuff
 		static Microsoft::WRL::ComPtr<ID3D12Device5> createRTDeviceFromAdapter(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel);

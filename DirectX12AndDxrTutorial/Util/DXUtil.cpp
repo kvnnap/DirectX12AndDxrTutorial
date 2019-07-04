@@ -273,6 +273,24 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 	return buffer;
 }
 
+Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::createTextureCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 width, UINT64 height, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags)
+{
+	wrl::ComPtr<ID3D12Resource> buffer;
+
+	// TODO: Check - Do we need mip level 1 for Ray Tracing?
+	HRESULT hr;
+	GFXTHROWIFFAILED(device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(heapType),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1u, 0u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		resourceState,
+		nullptr,
+		IID_PPV_ARGS(&buffer)
+	));
+
+	return buffer;
+}
+
 wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID3D12Device5> pDevice, wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList, wrl::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState)
 {
 	// Upload buffer to gpu
@@ -314,6 +332,21 @@ wrl::ComPtr<ID3D12RootSignature> Util::DXUtil::createRootSignature(wrl::ComPtr<I
 	GFXTHROWIFFAILED(pDevice->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(), rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
 
 	return rootSignature;
+}
+
+wrl::ComPtr<ID3D12DescriptorHeap> Util::DXUtil::createDescriptorHeap(wrl::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible)
+{
+	HRESULT hr;
+	wrl::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
+
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.NumDescriptors = count;
+	desc.Type = type;
+	desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+	GFXTHROWIFFAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
+
+	return descriptorHeap;
 }
 
 wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel)
