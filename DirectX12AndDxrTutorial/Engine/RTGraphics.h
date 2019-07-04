@@ -38,6 +38,11 @@ namespace Engine {
 		static const UINT numBackBuffers = 2;
 
 		static Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice);
+		static Microsoft::WRL::ComPtr<ID3D12Resource> createShaderTable(
+			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, 
+			Microsoft::WRL::ComPtr<ID3D12StateObject> pipelineStateObject,
+			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+			Microsoft::WRL::ComPtr<ID3D12Resource>& shaderTableTempResource);
 
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
@@ -68,7 +73,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
 
 		// Pipeline state object.
-		Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pShadingTable;
 
 		D3D12_RECT scissorRect;
 		D3D12_VIEWPORT viewport;

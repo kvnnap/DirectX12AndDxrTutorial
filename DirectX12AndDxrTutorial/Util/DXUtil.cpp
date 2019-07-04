@@ -273,6 +273,24 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 	return buffer;
 }
 
+wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID3D12Device5> pDevice, wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList, wrl::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState)
+{
+	// Upload buffer to gpu
+	wrl::ComPtr<ID3D12Resource> defaultResource = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, dataSize, D3D12_RESOURCE_STATE_COPY_DEST);
+	tempResource = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, dataSize, D3D12_RESOURCE_STATE_GENERIC_READ);
+	D3D12_SUBRESOURCE_DATA subresourceData = {};
+	subresourceData.pData = ptData;
+	subresourceData.RowPitch = dataSize;
+	subresourceData.SlicePitch = subresourceData.RowPitch;
+	UpdateSubresources(pCommandList.Get(), defaultResource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
+
+	// Change state so that it can be read
+	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(defaultResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState);
+	pCommandList->ResourceBarrier(1, &barrier);
+
+	return defaultResource;
+}
+
 wrl::ComPtr<ID3D12RootSignature> Util::DXUtil::createRootSignature(wrl::ComPtr<ID3D12Device5> pDevice, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc)
 {
 	// Check which root signature version we support - 1.1 is better than 1.0...

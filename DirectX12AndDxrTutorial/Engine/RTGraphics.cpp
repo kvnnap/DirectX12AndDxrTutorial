@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <array>
+#include <limits>
 #include <vector>
 #include <iostream>
 #include <d3dcompiler.h>
@@ -87,33 +88,19 @@ void Engine::RTGraphics::init()
 		DirectX::XMFLOAT3(-0.866f, -0.5f, 0.f)
 	};
 
-	vertexBuffer = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(triangle), D3D12_RESOURCE_STATE_COPY_DEST);
-	wrl::ComPtr<ID3D12Resource> intermediateBuffer = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, sizeof(triangle), D3D12_RESOURCE_STATE_GENERIC_READ);
-
-	D3D12_SUBRESOURCE_DATA subresourceData = {};
-	subresourceData.pData = triangle;
-	subresourceData.RowPitch = sizeof(triangle);
-	subresourceData.SlicePitch = subresourceData.RowPitch;
-
 	auto commandList = pCommandQueue->getCommandList();
 
-	// Upload vertices using intermediary upload heap - using helper method
-	UpdateSubresources(
-		commandList.Get(),
-		vertexBuffer.Get(),
-		intermediateBuffer.Get(),
-		0, 0, 1, &subresourceData
-	);
-
-	// Change vertexBuffer state so that it can be read for acceleration structure construction
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	commandList->ResourceBarrier(1, &barrier);
+	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
+	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, commandList, intermediateBuffer, triangle, sizeof(triangle), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	blasBuffers = DXUtil::createBottomLevelAS(pDevice, commandList, vertexBuffer, 1u, sizeof(dx::XMFLOAT3));
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
 	tlasBuffers = DXUtil::createTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer);
 
 	pStateObject = createRtPipeline(pDevice);
+
+	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
+	pShadingTable = createShaderTable(pDevice, pStateObject, commandList, shaderTableTempBuffer);
 
 	pCommandQueue->executeCommandList(commandList);
 	pCommandQueue->flush();
@@ -179,7 +166,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::W
 	// Second - Hit Program - link to entry point names
 	CD3DX12_HIT_GROUP_SUBOBJECT hitSubObject (stateObjectDesc);
 	hitSubObject.SetClosestHitShaderImport(L"chs");
-	hitSubObject.SetHitGroupExport(L"HitGtoup");
+	hitSubObject.SetHitGroupExport(L"HitGroup");
 
 	// Third - Local Root Signature
 	// Build the root signature descriptor and create root signature
@@ -241,5 +228,39 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::W
 	GFXTHROWIFFAILED(pDevice->CreateStateObject(stateObjectDesc, IID_PPV_ARGS(&stateObject)));
 
 	return stateObject;
+}
+
+wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(
+	wrl::ComPtr<ID3D12Device5> pDevice,
+	wrl::ComPtr<ID3D12StateObject> pipelineStateObject,
+	wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+	wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
+{
+	// Extract the properties interface
+	wrl::ComPtr<ID3D12StateObjectProperties> pStateObjectProps;
+	pipelineStateObject.As(&pStateObjectProps);
+
+	// Table layout is ProgramID + constants/descriptors/descriptor-tables
+	// Calculate size for shading table
+	UINT64 shaderTableSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+	shaderTableSize += 8; // Descriptor Table for ray gen
+	auto t = numeric_limits<size_t>::max();
+	std::align(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, shaderTableSize, (void*&)shaderTableSize, t); // align using largest record size (rayGen)
+	UINT64 shaderTableRecordSize = shaderTableSize;
+	shaderTableSize *= 3; // 3 Records
+
+	// Create host side buffer - it should be zero initialised when using make_unique..
+	unique_ptr<uint8_t[]> bufferManager = make_unique<uint8_t[]>(shaderTableSize);
+	uint8_t* buffer = bufferManager.get();
+
+	// Entry 0,1,2 - Program Id's
+	auto programs = { L"rayGen", L"miss", L"HitGroup" };
+	auto i = 0;
+	for (const auto& program : programs) {
+		memcpy(buffer + i++ * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+	}
+
+	// Upload buffer to gpu
+	return DXUtil::uploadDataToDefaultHeap(pDevice, pCommandList, shaderTableTempResource, buffer, shaderTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
