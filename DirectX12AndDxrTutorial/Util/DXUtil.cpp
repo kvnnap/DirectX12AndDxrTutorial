@@ -273,6 +273,31 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 	return buffer;
 }
 
+wrl::ComPtr<ID3D12RootSignature> Util::DXUtil::createRootSignature(wrl::ComPtr<ID3D12Device5> pDevice, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc)
+{
+	// Check which root signature version we support - 1.1 is better than 1.0...
+	// Root signature - https://docs.microsoft.com/en-us/windows/desktop/direct3d12/root-signatures-overview
+	HRESULT hr;
+
+	D3D12_FEATURE_DATA_ROOT_SIGNATURE featureData = {};
+	featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+	if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &featureData, sizeof(featureData))))
+	{
+		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+	}
+
+	// Serialise the signature
+	wrl::ComPtr<ID3DBlob> rootSignatureBlob;
+	wrl::ComPtr<ID3DBlob> errorBlob;
+	GFXTHROWIFFAILED(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &rootSignatureBlob, &errorBlob));
+
+	// Create the root signature.
+	wrl::ComPtr<ID3D12RootSignature> rootSignature;
+	GFXTHROWIFFAILED(pDevice->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(), rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+
+	return rootSignature;
+}
+
 wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel)
 {
 	HRESULT hr;

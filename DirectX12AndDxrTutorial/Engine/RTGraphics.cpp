@@ -182,9 +182,61 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::W
 	hitSubObject.SetHitGroupExport(L"HitGtoup");
 
 	// Third - Local Root Signature
-	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT localRootSignatureSubObject(stateObjectDesc);
-	//localRootSignatureSubObject.SetRootSignature()
+	// Build the root signature descriptor and create root signature
+	array<CD3DX12_DESCRIPTOR_RANGE1, 2> descriptorRanges = {
+		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE, 0), //gOutput
+		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE, 1) //gRtScene
+	};
+	
+	CD3DX12_ROOT_PARAMETER1 rootParameter;
+	rootParameter.InitAsDescriptorTable(descriptorRanges.size(), descriptorRanges.data());
+	
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc(1, &rootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+	wrl::ComPtr<ID3D12RootSignature> rootSignature = DXUtil::createRootSignature(pDevice, rootSignatureDesc);
 
+	// Set the local root signature sub object
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT rgLocalRootSignatureSubObject(stateObjectDesc);
+	rgLocalRootSignatureSubObject.SetRootSignature(rootSignature.Get());
+
+	// Fourth - Associate the local root signature to registers in shaders (in the rayGen program) using Export Association
+	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT rgAssociation(stateObjectDesc);
+	rgAssociation.AddExport(L"rayGen");
+	rgAssociation.SetSubobjectToAssociate(rgLocalRootSignatureSubObject);
+
+	// Fifth - create empty lrs for miss and hit programs
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC emptyRootSignatureDesc(0, static_cast<CD3DX12_ROOT_PARAMETER1*>(nullptr), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+	wrl::ComPtr<ID3D12RootSignature> emptyRootSignature = DXUtil::createRootSignature(pDevice, emptyRootSignatureDesc);
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT emptyLocalRootSignatureSubObject(stateObjectDesc);
+	emptyLocalRootSignatureSubObject.SetRootSignature(emptyRootSignature.Get());
+
+	// Sixth - Associate the empty local root signature with the miss and hit programs
+	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT emptyAssociation(stateObjectDesc);
+	emptyAssociation.AddExport(L"miss");
+	emptyAssociation.AddExport(L"chs");
+	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
+
+	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
+	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
+	shaderConfig.Config(sizeof(float), 2 * sizeof(float));
+
+	// Eighth - Associate the shader configuration with all shader programs
+	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT shaderConfigAssociation(stateObjectDesc);
+	shaderConfigAssociation.AddExport(L"rayGen");
+	shaderConfigAssociation.AddExport(L"miss");
+	shaderConfigAssociation.AddExport(L"chs");
+	shaderConfigAssociation.SetSubobjectToAssociate(shaderConfig);
+
+	// Ninth - Configure the RAY TRACING PIPELINE
+	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT rtPipelineConfig(stateObjectDesc);
+	rtPipelineConfig.Config(0);
+
+	// Tenth - Global Root Signature
+	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT globalRootSignature (stateObjectDesc);
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC globalEmptyRootSignatureDesc(0, static_cast<CD3DX12_ROOT_PARAMETER1*>(nullptr), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
+	wrl::ComPtr<ID3D12RootSignature> globalEmptyRootSignature = DXUtil::createRootSignature(pDevice, globalEmptyRootSignatureDesc);
+	globalRootSignature.SetRootSignature(globalEmptyRootSignature.Get());
+
+	// Finally - Create the state
 	wrl::ComPtr<ID3D12StateObject> stateObject;
 	GFXTHROWIFFAILED(pDevice->CreateStateObject(stateObjectDesc, IID_PPV_ARGS(&stateObject)));
 
