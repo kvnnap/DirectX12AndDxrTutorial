@@ -37,7 +37,7 @@ namespace Engine {
 
 		static const UINT numBackBuffers = 2;
 
-		static Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice);
+		static Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12RootSignature>& globalEmptyRootSignature);
 		void createShaderResources();
 		static Microsoft::WRL::ComPtr<ID3D12Resource> createShaderTable(
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, 
@@ -56,6 +56,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputRTTexture;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
+		Microsoft::WRL::ComPtr<ID3D12RootSignature> globalEmptyRootSignature;
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwapChain;
 

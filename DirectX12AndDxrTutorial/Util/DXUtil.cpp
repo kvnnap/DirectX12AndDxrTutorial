@@ -282,7 +282,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::createTextureCommittedResou
 	GFXTHROWIFFAILED(device->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(heapType),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1u, 0u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, width, height, 1u, 1u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
 		resourceState,
 		nullptr,
 		IID_PPV_ARGS(&buffer)

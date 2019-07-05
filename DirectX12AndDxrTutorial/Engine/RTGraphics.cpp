@@ -95,7 +95,7 @@ void Engine::RTGraphics::init()
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
 	tlasBuffers = DXUtil::createTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer);
 
-	pStateObject = createRtPipeline(pDevice);
+	pStateObject = createRtPipeline(pDevice, globalEmptyRootSignature);
 
 	createShaderResources();
 
@@ -106,31 +106,66 @@ void Engine::RTGraphics::init()
 	pCommandQueue->flush();
 }
 
+// Our begin frame
 void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 {
 	pCurrentCommandList = pCommandQueue->getCommandList();
 
+	pCurrentCommandList->SetDescriptorHeaps(1u, srvDescriptorHeap.GetAddressOf());
+
+	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
 	// Transition the back buffer from the present state to the render target state
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
-	pCurrentCommandList->ResourceBarrier(1, &barrier);
+	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
 
 	// Clear the RTV with the specified colour
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
-	FLOAT color[] = { red, green, blue, 1.0f };
-	pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
+	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
+	//FLOAT color[] = { red, green, blue, 1.0f };
+	//pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
 }
 
 void Engine::RTGraphics::draw(uint64_t timeMs)
 {
+	// bind empty root signature 
+	pCurrentCommandList->SetComputeRootSignature(globalEmptyRootSignature.Get());
+	pCurrentCommandList->SetPipelineState1(pStateObject.Get());
+
+	// Launch rays
+	D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = {};
+
+	// Dimensions of the compute grid
+	dispatchRaysDesc.Width = winWidth;
+	dispatchRaysDesc.Height = winHeight;
+	dispatchRaysDesc.Depth = 1;
+
+	// Ray generation shader record
+	dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = pShadingTable->GetGPUVirtualAddress();
+	dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
+
+	// Miss ray record
+	dispatchRaysDesc.MissShaderTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+	dispatchRaysDesc.MissShaderTable.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;   // THIS IS A QUICK HACK
+	dispatchRaysDesc.MissShaderTable.StrideInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
+
+	// Hit ray record
+	dispatchRaysDesc.HitGroupTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+	dispatchRaysDesc.HitGroupTable.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;   // THIS IS A QUICK HACK
+	dispatchRaysDesc.HitGroupTable.StrideInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
+
+
+	pCurrentCommandList->DispatchRays(&dispatchRaysDesc);
 }
 
 void Engine::RTGraphics::endFrame()
 {
+	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+
 	// Change the back buffer from the render target state to the present state
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
-	pCurrentCommandList->ResourceBarrier(1, &barrier);
+	// perform copy
+	pCurrentCommandList->CopyResource(backBuffer.Get(), outputRTTexture.Get());
+	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
 	// Execute command list
 	frameFenceValues[pCurrentBackBufferIndex] = pCommandQueue->executeCommandList(pCurrentCommandList);
@@ -146,7 +181,7 @@ void Engine::RTGraphics::endFrame()
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 }
 
-wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice)
+wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(wrl::ComPtr<ID3D12Device5> pDevice, wrl::ComPtr<ID3D12RootSignature>& globalEmptyRootSignature)
 {
 	HRESULT hr;
 
@@ -220,7 +255,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(Microsoft::W
 	// Tenth - Global Root Signature
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT globalRootSignature (stateObjectDesc);
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC globalEmptyRootSignatureDesc(0, static_cast<CD3DX12_ROOT_PARAMETER1*>(nullptr), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
-	wrl::ComPtr<ID3D12RootSignature> globalEmptyRootSignature = DXUtil::createRootSignature(pDevice, globalEmptyRootSignatureDesc);
+	globalEmptyRootSignature = DXUtil::createRootSignature(pDevice, globalEmptyRootSignatureDesc);
 	globalRootSignature.SetRootSignature(globalEmptyRootSignature.Get());
 
 	// Finally - Create the state
