@@ -91,9 +91,9 @@ void Engine::RTGraphics::init()
 	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
 	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, commandList, intermediateBuffer, triangle, sizeof(triangle), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	blasBuffers = DXUtil::createBottomLevelAS(pDevice, commandList, vertexBuffer, 1u, sizeof(dx::XMFLOAT3));
+	blasBuffers = DXUtil::createBottomLevelAS(pDevice, commandList, vertexBuffer, std::size(triangle), sizeof(dx::XMFLOAT3));
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
-	tlasBuffers = DXUtil::createTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer);
+	DXUtil::buildTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer, 0.f, false, tlasBuffers);
 
 	pStateObject = createRtPipeline(pDevice, globalEmptyRootSignature);
 
@@ -127,6 +127,9 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 
 void Engine::RTGraphics::draw(uint64_t timeMs)
 {
+	// Transform vertices in TLAS
+	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 2000) / 2000.f * 6.28f, true, tlasBuffers);
+
 	// bind empty root signature 
 	pCurrentCommandList->SetComputeRootSignature(globalEmptyRootSignature.Get());
 	pCurrentCommandList->SetPipelineState1(pStateObject.Get());
@@ -239,7 +242,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(wrl::ComPtr<
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
-	shaderConfig.Config(sizeof(float), 2 * sizeof(float));
+	shaderConfig.Config(3 * sizeof(float), 2 * sizeof(float));
 
 	// Eighth - Associate the shader configuration with all shader programs
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT shaderConfigAssociation(stateObjectDesc);
@@ -250,7 +253,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(wrl::ComPtr<
 
 	// Ninth - Configure the RAY TRACING PIPELINE
 	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT rtPipelineConfig(stateObjectDesc);
-	rtPipelineConfig.Config(0);
+	rtPipelineConfig.Config(1);
 
 	// Tenth - Global Root Signature
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT globalRootSignature (stateObjectDesc);

@@ -295,19 +295,31 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID
 {
 	// Upload buffer to gpu
 	wrl::ComPtr<ID3D12Resource> defaultResource = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, dataSize, D3D12_RESOURCE_STATE_COPY_DEST);
+
+	updateDataInDefaultHeap(pDevice, pCommandList, defaultResource, tempResource, ptData, dataSize, D3D12_RESOURCE_STATE_COPY_DEST, finalState);
+
+	return defaultResource;
+}
+
+void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState)
+{
+	// Transition to correct state
+	if (previousState != D3D12_RESOURCE_STATE_COPY_DEST) {
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), previousState, D3D12_RESOURCE_STATE_COPY_DEST));
+	}
+
+	// Upload buffer to gpu
 	tempResource = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, dataSize, D3D12_RESOURCE_STATE_GENERIC_READ);
 	D3D12_SUBRESOURCE_DATA subresourceData = {};
 	subresourceData.pData = ptData;
 	subresourceData.RowPitch = dataSize;
 	subresourceData.SlicePitch = subresourceData.RowPitch;
-	UpdateSubresources(pCommandList.Get(), defaultResource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
+	UpdateSubresources(pCommandList.Get(), resource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
 
 	// Change state so that it can be read
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(defaultResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState);
-	pCommandList->ResourceBarrier(1, &barrier);
-
-	return defaultResource;
+	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState));
 }
+
 
 wrl::ComPtr<ID3D12RootSignature> Util::DXUtil::createRootSignature(wrl::ComPtr<ID3D12Device5> pDevice, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc)
 {
@@ -401,47 +413,51 @@ DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(Microsoft
 	return blasBuffers;
 }
 
-DXUtil::AccelerationStructureBuffers Util::DXUtil::createTopLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer, Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer)
+void Util::DXUtil::buildTopLevelAS(
+	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+	Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer,
+	Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
+	float rotation,
+	bool update,
+	DXUtil::AccelerationStructureBuffers& tlasBuffers)
 {
-	AccelerationStructureBuffers tlasBuffers;
-
 	// Query the buffer sizes that we need to allocate
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
 	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	rtStructureDescriptor.NumDescs = 1;
 	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
 	
 	// Query the buffer sizes that we need to allocate
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};
 	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&rtStructureDescriptor, &prebuildInfo);
 
-	// Create the buffers..
-	tlasBuffers.pScratch = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	tlasBuffers.pResult = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	if (update) {
+		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get()));
+	}
+	else {
+		// Create the buffers..
+		tlasBuffers.pScratch = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		tlasBuffers.pResult = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	}
 
 	D3D12_RAYTRACING_INSTANCE_DESC rtInstanceDesc = {};
 	rtInstanceDesc.InstanceID = 0;
 	rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
 	rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 	rtInstanceDesc.AccelerationStructure = blasBuffer->GetGPUVirtualAddress();
-	DirectX::XMMATRIX identity = DirectX::XMMatrixIdentity();
+	DirectX::XMMATRIX identity = DirectX::XMMatrixRotationZ(rotation);
 	memcpy(rtInstanceDesc.Transform, &identity, sizeof(rtInstanceDesc.Transform));
 	rtInstanceDesc.InstanceMask = 0xFF;
 
 	// Upload ray tracing instance desc to GPU
-	tlasTempBuffer = createCommittedResource(pDevice, D3D12_HEAP_TYPE_UPLOAD, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_GENERIC_READ);
-	tlasBuffers.pInstanceDesc = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_COPY_DEST);
-	D3D12_SUBRESOURCE_DATA subresourceData = {};
-	subresourceData.pData = &rtInstanceDesc;
-	subresourceData.RowPitch = sizeof(rtInstanceDesc);
-	subresourceData.SlicePitch = subresourceData.RowPitch;
-	UpdateSubresources(pCommandList.Get(), tlasBuffers.pInstanceDesc.Get(), tlasTempBuffer.Get(), 0, 0, 1, &subresourceData);
-
-	// Change rt Desc buffer to D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE state
-	CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(tlasBuffers.pInstanceDesc.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	pCommandList->ResourceBarrier(1, &barrier);
-
+	if (update) {
+		updateDataInDefaultHeap(pDevice, pCommandList, tlasBuffers.pInstanceDesc, tlasTempBuffer, &rtInstanceDesc, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+	else {
+		tlasBuffers.pInstanceDesc = uploadDataToDefaultHeap(pDevice, pCommandList, tlasTempBuffer, &rtInstanceDesc, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
 	rtStructureDescriptor.InstanceDescs = tlasBuffers.pInstanceDesc->GetGPUVirtualAddress();
 
 	// Descriptor for building TLAS
@@ -450,11 +466,13 @@ DXUtil::AccelerationStructureBuffers Util::DXUtil::createTopLevelAS(Microsoft::W
 	tlasDesc.DestAccelerationStructureData = tlasBuffers.pResult->GetGPUVirtualAddress();
 	tlasDesc.ScratchAccelerationStructureData = tlasBuffers.pScratch->GetGPUVirtualAddress();
 
+	if (update) {
+		tlasDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+		tlasDesc.SourceAccelerationStructureData = tlasBuffers.pResult->GetGPUVirtualAddress();
+	}
+
 	pCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
 
 	// Insert barrier for uav access..
-	CD3DX12_RESOURCE_BARRIER uaVbarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get());
-	pCommandList->ResourceBarrier(1, &uaVbarrier);
-
-	return tlasBuffers;
+	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get()));
 }

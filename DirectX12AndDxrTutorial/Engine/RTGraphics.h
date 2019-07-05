@@ -53,6 +53,8 @@ namespace Engine {
 		std::unique_ptr<CommandQueue> pCommandQueue;
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList;
 		Util::DXUtil::AccelerationStructureBuffers blasBuffers, tlasBuffers;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pTlasTempBuffer[numBackBuffers];
+
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputRTTexture;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
