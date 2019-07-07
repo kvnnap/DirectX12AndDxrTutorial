@@ -1,6 +1,11 @@
 RaytracingAccelerationStructure gRtScene : register(t0);
 RWTexture2D<float4> gOutput : register(u0);
 
+cbuffer TriCol : register(b0) 
+{
+	float3 cols[3];
+}
+
 float3 linearToSrgb(float3 c)
 {
 	// Based on http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
@@ -67,7 +72,8 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	//payload.color = float3(1.f, 0.f, 0.f);
 	float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 
-	payload.color = barycentrics;
+	payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
+	//payload.color = cols[0];
 
 	/*const float3 A = float3(1, 0, 0);
 	const float3 B = float3(0, 1, 0);

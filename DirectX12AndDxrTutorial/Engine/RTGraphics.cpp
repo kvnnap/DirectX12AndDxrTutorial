@@ -86,24 +86,33 @@ void Engine::RTGraphics::init()
 		DirectX::XMFLOAT3(-0.866f, -0.5f, 0.f)
 	};
 
-	auto commandList = pCommandQueue->getCommandList();
+	pCurrentCommandList = pCommandQueue->getCommandList();
 
 	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
-	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, commandList, intermediateBuffer, triangle, sizeof(triangle), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, intermediateBuffer, triangle, sizeof(triangle), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	blasBuffers = DXUtil::createBottomLevelAS(pDevice, commandList, vertexBuffer, std::size(triangle), sizeof(dx::XMFLOAT3));
+	blasBuffers = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, vertexBuffer, std::size(triangle), sizeof(dx::XMFLOAT3));
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
-	DXUtil::buildTopLevelAS(pDevice, commandList, blasBuffers.pResult, tlasTempBuffer, 0.f, false, tlasBuffers);
+	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, tlasTempBuffer, 0.f, false, tlasBuffers);
 
 	pStateObject = createRtPipeline(pDevice, globalEmptyRootSignature);
 
 	createShaderResources();
+	createConstantBuffer();
 
 	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
-	pShadingTable = createShaderTable(pDevice, pStateObject, commandList, srvDescriptorHeap, shaderTableTempBuffer);
+	pShadingTable = createShaderTable(
+		pDevice,
+		pStateObject,
+		pCurrentCommandList,
+		srvDescriptorHeap,
+		pConstantBuffer,
+		shaderTableTempBuffer);
 
-	pCommandQueue->executeCommandList(commandList);
+	pCommandQueue->executeCommandList(pCurrentCommandList);
 	pCommandQueue->flush();
+
+	pCurrentCommandList.Reset();
 }
 
 // Our begin frame
@@ -128,7 +137,7 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 void Engine::RTGraphics::draw(uint64_t timeMs)
 {
 	// Transform vertices in TLAS
-	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 2000) / 2000.f * 6.28f, true, tlasBuffers);
+	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 2000) / 2000.f * 6.28f, true, tlasBuffers);
 
 	// bind empty root signature 
 	pCurrentCommandList->SetComputeRootSignature(globalEmptyRootSignature.Get());
@@ -237,8 +246,16 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline(wrl::ComPtr<
 	// Sixth - Associate the empty local root signature with the miss and hit programs
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT emptyAssociation(stateObjectDesc);
 	emptyAssociation.AddExport(L"miss");
-	emptyAssociation.AddExport(L"chs");
 	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
+
+	// Create root signature having constant buffer
+	CD3DX12_ROOT_PARAMETER1 cbvRootParameter;
+	cbvRootParameter.InitAsConstantBufferView(0);
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(1, &cbvRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+	wrl::ComPtr<ID3D12RootSignature> cbvRootSignature = DXUtil::createRootSignature(pDevice, cbvRootSignatureDesc);
+	// Set the local root signature sub object
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT cbvLocalRootSignatureSubObject(stateObjectDesc);
+	cbvLocalRootSignatureSubObject.SetRootSignature(cbvRootSignature.Get());
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
@@ -291,11 +308,30 @@ void Engine::RTGraphics::createShaderResources()
 	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
 }
 
+void Engine::RTGraphics::createConstantBuffer()
+{
+	// create constant buffer view - not on descriptor heap
+	DirectX::XMFLOAT4 cols[3] = {
+		DirectX::XMFLOAT4(1.f, 0.f, 0.f,0.f),
+		DirectX::XMFLOAT4(0.f,1.f,0.f,0.f),
+		DirectX::XMFLOAT4(0.f,0.f,1.f,0.f)
+	};
+
+	pConstantBuffer = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		pTlasTempBuffer[0],
+		cols,
+		sizeof(cols), 
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+}
+
 wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(
 	wrl::ComPtr<ID3D12Device5> pDevice,
 	wrl::ComPtr<ID3D12StateObject> pipelineStateObject,
 	wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
 	wrl::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap,
+	wrl::ComPtr<ID3D12Resource> constantBuffer,
 	wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
 {
 	// Extract the properties interface
@@ -325,6 +361,11 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(
 	// Fill in Entry 0 Descriptor table entry
 	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
 	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
+
+	// Fill in Entry 2 - CBV entry
+	auto cbvHandle = constantBuffer->GetGPUVirtualAddress();
+	memcpy(buffer + 2 * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+		&cbvHandle, sizeof(cbvHandle));
 
 	// Upload buffer to gpu
 	return DXUtil::uploadDataToDefaultHeap(pDevice, pCommandList, shaderTableTempResource, buffer, shaderTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
