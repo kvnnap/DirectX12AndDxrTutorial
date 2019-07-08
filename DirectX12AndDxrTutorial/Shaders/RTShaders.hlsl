@@ -40,8 +40,8 @@ void rayGen()
 
 	// Setup Ray
 	RayDesc ray;
-	ray.Origin = float3(0.f, 0.f, -2.f);
-	ray.Direction = normalize(float3(ndc.x * aspectRatio, -ndc.y, 1.f));
+	ray.Origin = float3(0.f, 1.f, 2.0f);
+	ray.Direction = normalize(float3(ndc.x * aspectRatio, -ndc.y, -1.f));
 	ray.TMin = 0.f;
 	ray.TMax = 1000.f;
 
@@ -63,7 +63,7 @@ void rayGen()
 [shader("miss")]
 void miss(inout RayPayload payload)
 {
-	payload.color = float3(0.4, 0.6, 0.2);
+	payload.color = float3(0.f, 0.f, 0.f);
 }
 
 [shader("closesthit")]
@@ -73,6 +73,8 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 
 	payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
+	//payload.color = cols[PrimitiveIndex() % 3];
+	//payload.color = float3(1, 1, 1);
 	//payload.color = cols[0];
 
 	/*const float3 A = float3(1, 0, 0);

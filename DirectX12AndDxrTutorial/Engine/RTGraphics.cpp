@@ -79,17 +79,20 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
+	Scene scene;
+ 	std::vector<dx::XMFLOAT3> triangle = scene.loadScene("CornellBox-Original.obj");
+
 	// Upload Geometry
-	DirectX::XMFLOAT3 triangle[3] = {
+	/*DirectX::XMFLOAT3 triangle[3] = {
 		DirectX::XMFLOAT3(    0.f,   1.f, 0.f),
 		DirectX::XMFLOAT3( 0.866f, -0.5f, 0.f),
 		DirectX::XMFLOAT3(-0.866f, -0.5f, 0.f)
-	};
+	};*/
 
 	pCurrentCommandList = pCommandQueue->getCommandList();
 
 	wrl::ComPtr<ID3D12Resource> intermediateBuffer;
-	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, intermediateBuffer, triangle, sizeof(triangle), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	vertexBuffer = DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, intermediateBuffer, triangle.data(), std::size(triangle) * sizeof(dx::XMFLOAT3), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	blasBuffers = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, vertexBuffer, std::size(triangle), sizeof(dx::XMFLOAT3));
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;

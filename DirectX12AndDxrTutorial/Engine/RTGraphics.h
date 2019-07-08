@@ -18,6 +18,8 @@
 #include "Camera.h"
 #include "IRenderer.h"
 
+#include "Scene.h"
+
 namespace Engine {
 	class RTGraphics 
 		: public IRenderer
