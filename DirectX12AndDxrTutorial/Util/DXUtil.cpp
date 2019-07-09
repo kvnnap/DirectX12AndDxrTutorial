@@ -291,7 +291,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::createTextureCommittedResou
 	return buffer;
 }
 
-wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID3D12Device5> pDevice, wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList, wrl::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState)
+wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID3D12Device5> pDevice, wrl::ComPtr<ID3D12GraphicsCommandList4> pCommandList, wrl::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState)
 {
 	// Upload buffer to gpu
 	wrl::ComPtr<ID3D12Resource> defaultResource = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, dataSize, D3D12_RESOURCE_STATE_COPY_DEST);
@@ -301,7 +301,7 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID
 	return defaultResource;
 }
 
-void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState)
+void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState)
 {
 	// Transition to correct state
 	if (previousState != D3D12_RESOURCE_STATE_COPY_DEST) {
@@ -375,26 +375,39 @@ wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<I
 	return pDevice;
 }
 
-DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> pVertexBuffer, UINT numVertices, UINT vertexSize)
+DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(
+	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
+	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+	const std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>& pVertexBuffers,
+	const std::vector<size_t>& vertexCounts,
+	UINT vertexSize)
 {
 	AccelerationStructureBuffers blasBuffers;
 
-	// Acceleration Structure setup - describes our geometry (similar to ied)
-	D3D12_RAYTRACING_GEOMETRY_DESC geometryDescriptor = {};
-	geometryDescriptor.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometryDescriptor.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-	geometryDescriptor.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetGPUVirtualAddress();
-	geometryDescriptor.Triangles.VertexBuffer.StrideInBytes = vertexSize;
-	geometryDescriptor.Triangles.VertexCount = numVertices;
-	geometryDescriptor.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+	// Create geometry descriptors
+	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> rtGeoDescriptors;
+	rtGeoDescriptors.reserve(pVertexBuffers.size());
+
+	for (const auto& pVertexBuffer : pVertexBuffers) {
+		// Acceleration Structure setup - describes our geometry (similar to ied)
+		D3D12_RAYTRACING_GEOMETRY_DESC geometryDescriptor = {};
+		geometryDescriptor.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+		geometryDescriptor.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+		geometryDescriptor.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetGPUVirtualAddress();
+		geometryDescriptor.Triangles.VertexBuffer.StrideInBytes = vertexSize;
+		geometryDescriptor.Triangles.VertexCount = vertexCounts[rtGeoDescriptors.size()];
+		geometryDescriptor.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+
+		rtGeoDescriptors.push_back(geometryDescriptor);
+	}
 
 	// Bottom level?
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
 	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	rtStructureDescriptor.NumDescs = 1;
+	rtStructureDescriptor.NumDescs = rtGeoDescriptors.size();
 	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
 	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-	rtStructureDescriptor.pGeometryDescs = &geometryDescriptor;
+	rtStructureDescriptor.pGeometryDescs = rtGeoDescriptors.data();
 
 	// Query the buffer sizes that we need to allocate
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo = {};

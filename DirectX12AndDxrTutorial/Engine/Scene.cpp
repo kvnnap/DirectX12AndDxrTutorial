@@ -7,9 +7,12 @@
 using namespace std;
 using namespace Engine;
 
-vector<DirectX::XMFLOAT3> Engine::Scene::loadScene(const string& pathToObj)
+void Engine::Scene::loadScene(const string& pathToObj)
 {
 	using namespace  tinyobj;
+
+	vertices.clear();
+	materials.clear();
 
 	attrib_t attr = {};
 	vector<shape_t> shapes;
@@ -17,11 +20,12 @@ vector<DirectX::XMFLOAT3> Engine::Scene::loadScene(const string& pathToObj)
 	string warn, err;
 	LoadObj(&attr, &shapes, &materials, &warn, &err, pathToObj.c_str());
 
-	vector<DirectX::XMFLOAT3> verts;
+	vertices.resize(materials.size());
+
 	// for each shape
 	for (const auto& shape : shapes) {
 		size_t index = 0;
-
+		size_t faceNum = 0;
 		// for each face
 		for (const auto& vertexCountForFace : shape.mesh.num_face_vertices) {
 			if (vertexCountForFace != 3) {
@@ -32,15 +36,35 @@ vector<DirectX::XMFLOAT3> Engine::Scene::loadScene(const string& pathToObj)
 			for (size_t v = 0; v < vertexCountForFace; ++v) {
 				int vertexIndex = shape.mesh.indices[index + v].vertex_index;
 				size_t vertexLocation = 3 * static_cast<size_t>(vertexIndex);
-				verts.push_back(DirectX::XMFLOAT3(
+				vertices[shape.mesh.material_ids[faceNum]].push_back(DirectX::XMFLOAT3(
 					attr.vertices[vertexLocation],
 					attr.vertices[vertexLocation + 1],
 					attr.vertices[vertexLocation + 2]));
 			}
 
 			index += vertexCountForFace;
+			++faceNum;
 		}
 	}
 
-	return verts;
+	for (const auto& material : materials) {
+		this->materials.push_back(Material{ DirectX::XMFLOAT4(
+			material.diffuse[0],material.diffuse[1],material.diffuse[2], 1.f
+		) });
+	}
+}
+
+const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() const
+{
+	return vertices;
+}
+
+const std::vector<DirectX::XMFLOAT3>& Engine::Scene::getVertices(size_t materialId) const
+{
+	return vertices.at(materialId);
+}
+
+const vector<Material>& Engine::Scene::getMaterials() const
+{
+	return materials;
 }

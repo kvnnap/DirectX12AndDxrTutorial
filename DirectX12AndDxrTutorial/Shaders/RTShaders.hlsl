@@ -3,7 +3,7 @@ RWTexture2D<float4> gOutput : register(u0);
 
 cbuffer TriCol : register(b0) 
 {
-	float3 cols[3];
+	float3 cols;
 }
 
 float3 linearToSrgb(float3 c)
@@ -51,7 +51,8 @@ void rayGen()
 		gRtScene,	// Acceleration Structure
 		0,			// Ray flags
 		0xFF,		// Instance inclusion Mask (0xFF includes everything)
-		0, 0,		// Shader table indexing for hit group, etc
+		0,			// RayContributionToHitGroupIndex
+		1,			// MultiplierForGeometryContributionToShaderIndex
 		0,			// Miss shader index (within the shader table)
 		ray,
 		payload);
@@ -70,12 +71,12 @@ void miss(inout RayPayload payload)
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
 	//payload.color = float3(1.f, 0.f, 0.f);
-	float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
+	//float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 
-	payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
+	//payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
 	//payload.color = cols[PrimitiveIndex() % 3];
 	//payload.color = float3(1, 1, 1);
-	//payload.color = cols[0];
+	payload.color = cols;
 
 	/*const float3 A = float3(1, 0, 0);
 	const float3 B = float3(0, 1, 0);

@@ -185,6 +185,7 @@
   <ItemGroup>
     <ClInclude Include="App.h" />
     <ClInclude Include="Engine\IRenderer.h" />
+    <ClInclude Include="Engine\Material.h" />
     <ClInclude Include="Engine\RTGraphics.h" />
     <ClInclude Include="Libraries\tinyobjloader\tiny_obj_loader.h" />
     <ClInclude Include="Engine\Scene.h" />

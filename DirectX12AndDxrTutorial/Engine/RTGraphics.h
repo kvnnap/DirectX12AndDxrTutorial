@@ -39,16 +39,10 @@ namespace Engine {
 
 		static const UINT numBackBuffers = 2;
 
-		static Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12RootSignature>& globalEmptyRootSignature);
+		Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline();
 		void createShaderResources();
 		void createConstantBuffer();
-		static Microsoft::WRL::ComPtr<ID3D12Resource> createShaderTable(
-			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, 
-			Microsoft::WRL::ComPtr<ID3D12StateObject> pipelineStateObject,
-			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-			Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap,
-			Microsoft::WRL::ComPtr<ID3D12Resource> constantBuffer,
-			Microsoft::WRL::ComPtr<ID3D12Resource>& shaderTableTempResource);
+		Microsoft::WRL::ComPtr<ID3D12Resource> createShaderTable(Microsoft::WRL::ComPtr<ID3D12Resource>& shaderTableTempResource);
 
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
@@ -79,7 +73,7 @@ namespace Engine {
 
 		// Temporary triangle stuff here
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
-		Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
+		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> vertexBuffers;
 
 		// Root signature
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
@@ -91,5 +85,7 @@ namespace Engine {
 		D3D12_VIEWPORT viewport;
 
 		std::unique_ptr<Camera> camera;
+
+		Scene scene;
 	};
 }

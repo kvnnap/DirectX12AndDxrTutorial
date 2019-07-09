@@ -40,9 +40,9 @@ namespace Util
 		static Microsoft::WRL::ComPtr<ID3D12Resource> createCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 size, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
 		static Microsoft::WRL::ComPtr<ID3D12Resource> createTextureCommittedResource(Microsoft::WRL::ComPtr<ID3D12Device5> device, D3D12_HEAP_TYPE heapType, UINT64 width, UINT64 height, D3D12_RESOURCE_STATES resourceState, D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE);
 		
-		static Microsoft::WRL::ComPtr<ID3D12Resource> uploadDataToDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState);
+		static Microsoft::WRL::ComPtr<ID3D12Resource> uploadDataToDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES finalState);
 		
-		static void updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState);
+		static void updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState);
 
 		static Microsoft::WRL::ComPtr<ID3D12RootSignature> createRootSignature(Microsoft::WRL::ComPtr<ID3D12Device5> device, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc);
 
@@ -60,7 +60,13 @@ namespace Util
 
 		// Vertex buffer must be in a readable state
 		// The bottom level AS deals with objects at the local level
-		static AccelerationStructureBuffers createBottomLevelAS(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource> pVertexBuffer, UINT numVertices, UINT vertexSize);
+		static AccelerationStructureBuffers createBottomLevelAS(
+			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
+			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
+			const std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>& pVertexBuffer,
+			const std::vector<size_t>& vertexCounts,
+			UINT vertexSize);
+
 		static void buildTopLevelAS(
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
