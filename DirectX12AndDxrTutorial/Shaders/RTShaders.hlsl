@@ -1,5 +1,5 @@
 RaytracingAccelerationStructure gRtScene : register(t0);
-ByteAddressBuffer gVerts : register(t1);
+StructuredBuffer<float3> gVerts : register(t1);
 RWTexture2D<float4> gOutput : register(u0);
 
 cbuffer TriCol : register(b0) 
@@ -80,10 +80,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 lightDir = normalize(lightPos - interPoint);
 
 	// Face normal
-	uint index = pIndex * 4 * 3 * 3;
-	float3 a0 = asfloat(gVerts.Load3(index));
-	float3 a1 = asfloat(gVerts.Load3(index +12));
-	float3 a2 = asfloat(gVerts.Load3(index +24));
+	uint index = pIndex * 3;
+	float3 a0 = gVerts.Load(index);
+	float3 a1 = gVerts.Load(index + 1);
+	float3 a2 = gVerts.Load(index + 2);
 
 	float3 normal = normalize(cross(a1 - a0, a2 - a0));
 
