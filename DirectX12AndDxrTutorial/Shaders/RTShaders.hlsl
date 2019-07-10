@@ -1,4 +1,5 @@
 RaytracingAccelerationStructure gRtScene : register(t0);
+ByteAddressBuffer gVerts : register(t1);
 RWTexture2D<float4> gOutput : register(u0);
 
 cbuffer TriCol : register(b0) 
@@ -70,13 +71,32 @@ void miss(inout RayPayload payload)
 [shader("closesthit")]
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
+	uint pIndex = PrimitiveIndex();
+
+	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+
+	// assume point light
+	const float3 lightPos = float3(0.f, 1.96f, 0.f);
+	float3 lightDir = normalize(lightPos - interPoint);
+
+	// Face normal
+	uint index = pIndex * 4 * 3 * 3;
+	float3 a0 = asfloat(gVerts.Load3(index));
+	float3 a1 = asfloat(gVerts.Load3(index +12));
+	float3 a2 = asfloat(gVerts.Load3(index +24));
+
+	float3 normal = normalize(cross(a1 - a0, a2 - a0));
+
+	float coeff = saturate(dot(lightDir, normal));
+
 	//payload.color = float3(1.f, 0.f, 0.f);
 	//float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 
 	//payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
 	//payload.color = cols[PrimitiveIndex() % 3];
 	//payload.color = float3(1, 1, 1);
-	payload.color = cols;
+	payload.color = coeff * cols;
+	//payload.color = normal;
 
 	/*const float3 A = float3(1, 0, 0);
 	const float3 B = float3(0, 1, 0);
