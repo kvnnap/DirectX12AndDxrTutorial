@@ -220,13 +220,17 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	GFXTHROWIFFAILED(D3DReadFileToBlob(L"./Shaders/RTShaders.cso", &pRTShadersBlob));
 	CD3DX12_DXIL_LIBRARY_SUBOBJECT dxilSubObject (stateObjectDesc);
 	dxilSubObject.SetDXILLibrary(&CD3DX12_SHADER_BYTECODE(pRTShadersBlob.Get()));
-	const WCHAR* entryPoints[] = { L"rayGen", L"miss", L"chs" };
+	const WCHAR* entryPoints[] = { L"rayGen", L"miss", L"chs", L"shadowChs" };
 	dxilSubObject.DefineExports(entryPoints);
 
 	// Second - Hit Program - link to entry point names
 	CD3DX12_HIT_GROUP_SUBOBJECT hitSubObject (stateObjectDesc);
 	hitSubObject.SetClosestHitShaderImport(L"chs");
 	hitSubObject.SetHitGroupExport(L"HitGroup");
+
+	CD3DX12_HIT_GROUP_SUBOBJECT shadowHitSubObject(stateObjectDesc);
+	shadowHitSubObject.SetClosestHitShaderImport(L"shadowChs");
+	shadowHitSubObject.SetHitGroupExport(L"ShadowHitGroup");
 
 	// Third - Local Root Signature for Ray Gen shader
 	// Build the root signature descriptor and create root signature
@@ -259,13 +263,15 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	// Sixth - Associate the empty local root signature with the miss programs
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT emptyAssociation(stateObjectDesc);
 	emptyAssociation.AddExport(L"miss");
+	emptyAssociation.AddExport(L"ShadowHitGroup");
 	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
 
 	// Create root signature having constant buffer and SRV
 	std::vector< CD3DX12_ROOT_PARAMETER1> chsRootParams;
-	chsRootParams.resize(2);
+	chsRootParams.resize(3);
 	chsRootParams[0].InitAsConstantBufferView(0);
 	chsRootParams[1].InitAsShaderResourceView(1);
+	chsRootParams[2] = rootParameter;
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 	wrl::ComPtr<ID3D12RootSignature> cbvRootSignature = DXUtil::createRootSignature(pDevice, cbvRootSignatureDesc);
 	// Set the local root signature sub object
@@ -274,7 +280,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Associate cbv signature with hit program
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT hitAssociation(stateObjectDesc);
-	hitAssociation.AddExport(L"chs");
+	hitAssociation.AddExport(L"HitGroup");
 	hitAssociation.SetSubobjectToAssociate(cbvLocalRootSignatureSubObject);
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
@@ -285,12 +291,13 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT shaderConfigAssociation(stateObjectDesc);
 	shaderConfigAssociation.AddExport(L"rayGen");
 	shaderConfigAssociation.AddExport(L"miss");
-	shaderConfigAssociation.AddExport(L"chs");
+	shaderConfigAssociation.AddExport(L"HitGroup");
+	shaderConfigAssociation.AddExport(L"ShadowHitGroup");
 	shaderConfigAssociation.SetSubobjectToAssociate(shaderConfig);
 
 	// Ninth - Configure the RAY TRACING PIPELINE
 	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT rtPipelineConfig(stateObjectDesc);
-	rtPipelineConfig.Config(1);
+	rtPipelineConfig.Config(2);
 
 	// Tenth - Global Root Signature
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT globalRootSignature (stateObjectDesc);
@@ -350,12 +357,13 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 	// Table layout is ProgramID + constants/descriptors/descriptor-tables
 	// Calculate size for shading table
 	UINT64 shaderTableSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-	shaderTableSize += 8 + 8; // Descriptor Table for ray gen and constant buffer descriptor which is alsy 8 bytes
+	shaderTableSize += 8 + 8 + 8; // Descriptor Table for ray gen and constant buffer descriptor which is alsy 8 bytes
 	auto t = numeric_limits<size_t>::max();
 	std::align(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, shaderTableSize, (void*&)shaderTableSize, t); // align using largest record size (rayGen)
 	const UINT64 shaderTableRecordSize = shaderTableSize;
 	const size_t hitGroupRecords = scene.getVertices().size();
-	const size_t numRecords = 2 + hitGroupRecords;
+	const size_t otherRecords = 2;
+	const size_t numRecords = otherRecords + (hitGroupRecords*2);
 	shaderTableSize *= numRecords; // 2 Records (rayGen/miss) + n hit group records
 
 	// Create host side buffer - it should be zero initialised when using make_unique..
@@ -368,21 +376,31 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 		memcpy(buffer + i++ * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 	}
 
-	for (; i < numRecords; ++i) {
-		memcpy(buffer + i * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-		auto actualIndex = (i - (numRecords - hitGroupRecords));
-		// Fill in Entry 2 - CBV entry
-		auto cbvHandle = pMaterialsConstantBuffer->GetGPUVirtualAddress() + actualIndex * sizeof(Material);
-		memcpy(buffer + i * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &cbvHandle, sizeof(cbvHandle));
-
-		auto srvHandle = vertexBuffers[actualIndex]->GetGPUVirtualAddress();
-		memcpy(buffer + i * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8, &srvHandle, sizeof(srvHandle));
-	}
-
 	// Fill in Entry 0 Descriptor table entry
 	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
 	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
+
+	for (i = 0; i < hitGroupRecords; ++i) {
+
+		size_t index = otherRecords + i * 2;
+
+		memcpy(buffer + index * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+		// Fill in Entry 2 - CBV entry
+		auto cbvHandle = pMaterialsConstantBuffer->GetGPUVirtualAddress() + i * sizeof(Material);
+		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &cbvHandle, sizeof(cbvHandle));
+
+		// Vertices ptr
+		auto srvHandle = vertexBuffers[i]->GetGPUVirtualAddress();
+		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8, &srvHandle, sizeof(srvHandle));
+
+		// descriptor table pointer
+		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 16, &descriptorTableHandle, sizeof(descriptorTableHandle));
+
+		// SHADOW
+		++index;
+		memcpy(buffer + index * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"ShadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+	}
 
 	// Upload buffer to gpu
 	return DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shaderTableTempResource, buffer, shaderTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);

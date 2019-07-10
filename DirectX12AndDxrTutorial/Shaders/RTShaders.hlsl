@@ -53,7 +53,7 @@ void rayGen()
 		0,			// Ray flags
 		0xFF,		// Instance inclusion Mask (0xFF includes everything)
 		0,			// RayContributionToHitGroupIndex
-		1,			// MultiplierForGeometryContributionToShaderIndex
+		2,			// MultiplierForGeometryContributionToShaderIndex
 		0,			// Miss shader index (within the shader table)
 		ray,
 		payload);
@@ -77,7 +77,31 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
 	// assume point light
 	const float3 lightPos = float3(0.f, 1.96f, 0.f);
-	float3 lightDir = normalize(lightPos - interPoint);
+	float3 lightDirLarge = lightPos - interPoint;
+
+	// Setup Shadow Ray
+	RayDesc ray;
+	ray.Origin = interPoint;
+	ray.Direction = lightDirLarge;
+	ray.TMin = 0.001f;
+	ray.TMax = 0.99f;
+
+	TraceRay(
+		gRtScene,	// Acceleration Structure
+		0,			// Ray flags
+		0xFF,		// Instance inclusion Mask (0xFF includes everything)
+		1,			// RayContributionToHitGroupIndex
+		2,			// MultiplierForGeometryContributionToShaderIndex
+		0,			// Miss shader index (within the shader table)
+		ray,
+		payload);
+
+	if (payload.color[0] == 2.f) {
+		payload.color = float3(0.f, 0.f, 0.f);
+		return;
+	}
+
+	float3 lightDir = normalize(lightDirLarge);
 
 	// Face normal
 	uint index = pIndex * 3;
@@ -103,4 +127,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	const float3 C = float3(0, 0, 1);
 
 	payload.color = A * barycentrics.x + B * barycentrics.y + C * barycentrics.z;*/
+}
+
+[shader("closesthit")]
+void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+	payload.color = float3(2.f, 0.f, 0.f);
 }
