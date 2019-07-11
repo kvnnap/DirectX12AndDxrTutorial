@@ -23,6 +23,8 @@
 #include "../Libraries/imgui/imgui_impl_win32.h"
 #include "../Libraries/imgui/imgui_impl_dx12.h"
 
+#include "../Shaders/RTShaders.hlsli"
+
 namespace wrl = Microsoft::WRL;
 namespace dx = DirectX;
 
@@ -117,7 +119,7 @@ void Engine::RTGraphics::init()
 	pStateObject = createRtPipeline();
 
 	createShaderResources();
-	createConstantBuffer();
+	createMaterialsAndFaceAttributes();
 
 	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
 	pShadingTable = createShaderTable(shaderTableTempBuffer);
@@ -166,18 +168,17 @@ void Engine::RTGraphics::draw(uint64_t timeMs)
 
 	// Ray generation shader record
 	dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = pShadingTable->GetGPUVirtualAddress();
-	dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
+	dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes = 64;
 
 	// Miss ray record
-	dispatchRaysDesc.MissShaderTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
-	dispatchRaysDesc.MissShaderTable.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;   // THIS IS A QUICK HACK
-	dispatchRaysDesc.MissShaderTable.StrideInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
+	dispatchRaysDesc.MissShaderTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 64;
+	dispatchRaysDesc.MissShaderTable.SizeInBytes = 64;  
+	dispatchRaysDesc.MissShaderTable.StrideInBytes = 64;
 
 	// Hit ray record
-	dispatchRaysDesc.HitGroupTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
-	dispatchRaysDesc.HitGroupTable.SizeInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;   // THIS IS A QUICK HACK
-	dispatchRaysDesc.HitGroupTable.StrideInBytes = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT; // THIS IS A QUICK HACK
-
+	dispatchRaysDesc.HitGroupTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 128;
+	dispatchRaysDesc.HitGroupTable.SizeInBytes = D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT * 3 * scene.getVertices().size() * 2;
+	dispatchRaysDesc.HitGroupTable.StrideInBytes = D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT * 3;
 
 	pCurrentCommandList->DispatchRays(&dispatchRaysDesc);
 }
@@ -268,10 +269,12 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Create root signature having constant buffer and SRV
 	std::vector< CD3DX12_ROOT_PARAMETER1> chsRootParams;
-	chsRootParams.resize(3);
+	chsRootParams.resize(5);
 	chsRootParams[0].InitAsConstantBufferView(0);
 	chsRootParams[1].InitAsShaderResourceView(1);
 	chsRootParams[2] = rootParameter;
+	chsRootParams[3].InitAsShaderResourceView(2);
+	chsRootParams[4].InitAsShaderResourceView(3);
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 	wrl::ComPtr<ID3D12RootSignature> cbvRootSignature = DXUtil::createRootSignature(pDevice, cbvRootSignatureDesc);
 	// Set the local root signature sub object
@@ -335,17 +338,28 @@ void Engine::RTGraphics::createShaderResources()
 	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
 }
 
-void Engine::RTGraphics::createConstantBuffer()
+void Engine::RTGraphics::createMaterialsAndFaceAttributes()
 {
 	// create constant buffer view - not on descriptor heap
-	pMaterialsConstantBuffer = DXUtil::uploadDataToDefaultHeap(
+	pMaterials = DXUtil::uploadDataToDefaultHeap(
 		pDevice,
 		pCurrentCommandList,
 		pTlasTempBuffer[0],
 		scene.getMaterials().data(),
 		sizeof(Material) * scene.getMaterials().size(),
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-	
+
+	// Get Face attributes
+	const std::vector<Shaders::FaceAttributes>& faceAttributes = scene.getFaceAttributes();
+
+	// Copy..
+	pFaceAttributes = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		pTlasTempBuffer[1],
+		faceAttributes.data(),
+		sizeof(Shaders::FaceAttributes) * faceAttributes.size(),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
 wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
@@ -356,53 +370,64 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 
 	// Table layout is ProgramID + constants/descriptors/descriptor-tables
 	// Calculate size for shading table
-	UINT64 shaderTableSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-	shaderTableSize += 8 + 8 + 8; // Descriptor Table for ray gen and constant buffer descriptor which is alsy 8 bytes
+	UINT64 hitGroupTableSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8 + 8 + 8 + 8 + 8;
 	auto t = numeric_limits<size_t>::max();
-	std::align(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, shaderTableSize, (void*&)shaderTableSize, t); // align using largest record size (rayGen)
-	const UINT64 shaderTableRecordSize = shaderTableSize;
+	std::align(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, hitGroupTableSize, (void*&)hitGroupTableSize, t); // align using largest record size (rayGen)
+	const UINT64 hitGroupTableRecordSize = hitGroupTableSize;
 	const size_t hitGroupRecords = scene.getVertices().size();
-	const size_t otherRecords = 2;
-	const size_t numRecords = otherRecords + (hitGroupRecords*2);
-	shaderTableSize *= numRecords; // 2 Records (rayGen/miss) + n hit group records
+	hitGroupTableSize *= hitGroupRecords * 2; // 2 Records (rayGen/miss) + n hit group records
+	const size_t totalTableSize = 128 + hitGroupTableSize;
 
 	// Create host side buffer - it should be zero initialised when using make_unique..
-	unique_ptr<uint8_t[]> bufferManager = make_unique<uint8_t[]>(shaderTableSize);
+	unique_ptr<uint8_t[]> bufferManager = make_unique<uint8_t[]>(totalTableSize);
 	uint8_t* buffer = bufferManager.get();
 
 	// Entry 0,1 - Program Id's
 	size_t i = 0;
 	for (const auto& program : { L"rayGen", L"miss" }) {
-		memcpy(buffer + i++ * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+		memcpy(buffer + i++ * 64, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 	}
 
 	// Fill in Entry 0 Descriptor table entry
 	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
 	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
 
+	size_t faceAttributeIndex = 0;
+
 	for (i = 0; i < hitGroupRecords; ++i) {
 
-		size_t index = otherRecords + i * 2;
+		size_t index = i * 2;
 
-		memcpy(buffer + index * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+		uint8_t* address = buffer + 128 + index * hitGroupTableRecordSize;
 
-		// Fill in Entry 2 - CBV entry
-		auto cbvHandle = pMaterialsConstantBuffer->GetGPUVirtualAddress() + i * sizeof(Material);
-		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &cbvHandle, sizeof(cbvHandle));
+		memcpy(address, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+		// Fill in Entry 2 - CBV entry - need to change to use it for camera..
+		auto handle = pMaterials->GetGPUVirtualAddress() + i * sizeof(Material);
+		memcpy(address += D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &handle, sizeof(handle));
 
 		// Vertices ptr
-		auto srvHandle = vertexBuffers[i]->GetGPUVirtualAddress();
-		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8, &srvHandle, sizeof(srvHandle));
+		handle = vertexBuffers[i]->GetGPUVirtualAddress();
+		memcpy(address += 8, &handle, sizeof(handle));
 
 		// descriptor table pointer
-		memcpy(buffer + index * shaderTableRecordSize + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 16, &descriptorTableHandle, sizeof(descriptorTableHandle));
+		memcpy(address += 8, &descriptorTableHandle, sizeof(descriptorTableHandle));
+
+		// Face attributes
+		handle = pFaceAttributes->GetGPUVirtualAddress() + faceAttributeIndex * sizeof(Shaders::FaceAttributes);
+		memcpy(address += 8, &handle, sizeof(handle));
+		faceAttributeIndex += scene.getVertices(i).size() / 3;
+
+		// Material
+		handle = pMaterials->GetGPUVirtualAddress();
+		memcpy(address += 8, &handle, sizeof(handle));
 
 		// SHADOW
 		++index;
-		memcpy(buffer + index * shaderTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"ShadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+		memcpy(buffer + 128 + index * hitGroupTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"ShadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 	}
 
 	// Upload buffer to gpu
-	return DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shaderTableTempResource, buffer, shaderTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	return DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shaderTableTempResource, buffer, totalTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 

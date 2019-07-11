@@ -20,8 +20,8 @@ void Engine::Scene::loadScene(const string& pathToObj)
 	string warn, err;
 	LoadObj(&attr, &shapes, &materials, &warn, &err, pathToObj.c_str());
 
-	vertices.resize(materials.size());
-
+	vertices.resize(shapes.size());
+	size_t shapeNum = 0;
 	// for each shape
 	for (const auto& shape : shapes) {
 		size_t index = 0;
@@ -36,7 +36,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 			for (size_t v = 0; v < vertexCountForFace; ++v) {
 				int vertexIndex = shape.mesh.indices[index + v].vertex_index;
 				size_t vertexLocation = 3 * static_cast<size_t>(vertexIndex);
-				vertices[shape.mesh.material_ids[faceNum]].push_back(DirectX::XMFLOAT3(
+				vertices[shapeNum].push_back(DirectX::XMFLOAT3(
 					attr.vertices[vertexLocation],
 					attr.vertices[vertexLocation + 1],
 					attr.vertices[vertexLocation + 2]));
@@ -45,6 +45,13 @@ void Engine::Scene::loadScene(const string& pathToObj)
 			index += vertexCountForFace;
 			++faceNum;
 		}
+
+		// for each face
+		for (const auto& materialId : shape.mesh.material_ids) {
+			faceAttributes.push_back({ static_cast<std::uint32_t>(materialId) });
+		}
+
+		++shapeNum;
 	}
 
 	for (const auto& material : materials) {
@@ -62,6 +69,11 @@ const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() 
 const std::vector<DirectX::XMFLOAT3>& Engine::Scene::getVertices(size_t materialId) const
 {
 	return vertices.at(materialId);
+}
+
+const std::vector<Shaders::FaceAttributes>& Engine::Scene::getFaceAttributes() const
+{
+	return faceAttributes;
 }
 
 const vector<Material>& Engine::Scene::getMaterials() const

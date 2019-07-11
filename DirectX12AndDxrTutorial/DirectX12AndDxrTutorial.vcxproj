@@ -272,6 +272,9 @@
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)Shaders/%(Filename).cso</ObjectFileOutput>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\RTShaders.hlsli" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

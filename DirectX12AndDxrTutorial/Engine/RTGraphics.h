@@ -41,7 +41,7 @@ namespace Engine {
 
 		Microsoft::WRL::ComPtr<ID3D12StateObject> createRtPipeline();
 		void createShaderResources();
-		void createConstantBuffer();
+		void createMaterialsAndFaceAttributes();
 		Microsoft::WRL::ComPtr<ID3D12Resource> createShaderTable(Microsoft::WRL::ComPtr<ID3D12Resource>& shaderTableTempResource);
 
 		DxgiInfoManager infoManager;
@@ -55,7 +55,8 @@ namespace Engine {
 
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputRTTexture;
-		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterialsConstantBuffer;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> globalEmptyRootSignature;
 

@@ -1,10 +1,16 @@
+#include "RTShaders.hlsli"
+
 RaytracingAccelerationStructure gRtScene : register(t0);
-StructuredBuffer<float3> gVerts : register(t1);
+StructuredBuffer<float3> verts : register(t1);
+StructuredBuffer<FaceAttributes> faceAttributes : register(t2);
+StructuredBuffer<Material> materials : register(t3);
+
+// Output texture
 RWTexture2D<float4> gOutput : register(u0);
 
 cbuffer TriCol : register(b0) 
 {
-	float3 cols;
+	Material material;
 }
 
 float3 linearToSrgb(float3 c)
@@ -96,7 +102,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		ray,
 		payload);
 
-	if (payload.color[0] == 2.f) {
+	if (payload.color[0] == 1.f) {
 		payload.color = float3(0.f, 0.f, 0.f);
 		return;
 	}
@@ -105,9 +111,9 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
 	// Face normal
 	uint index = pIndex * 3;
-	float3 a0 = gVerts.Load(index);
-	float3 a1 = gVerts.Load(index + 1);
-	float3 a2 = gVerts.Load(index + 2);
+	float3 a0 = verts.Load(index);
+	float3 a1 = verts.Load(index + 1);
+	float3 a2 = verts.Load(index + 2);
 
 	float3 normal = normalize(cross(a1 - a0, a2 - a0));
 
@@ -119,7 +125,11 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	//payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
 	//payload.color = cols[PrimitiveIndex() % 3];
 	//payload.color = float3(1, 1, 1);
-	payload.color = coeff * cols;
+
+	// Get material
+	FaceAttributes f = faceAttributes.Load(pIndex);
+
+	payload.color = coeff * (float3)materials[f.materialId].diffuse;
 	//payload.color = normal;
 
 	/*const float3 A = float3(1, 0, 0);
@@ -132,5 +142,5 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 [shader("closesthit")]
 void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.color = float3(2.f, 0.f, 0.f);
+	payload.color = float3(1.f, 0.f, 0.f);
 }

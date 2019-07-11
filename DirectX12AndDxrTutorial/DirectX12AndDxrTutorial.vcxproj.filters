@@ -173,4 +173,7 @@
     <FxCompile Include="Shaders\PixelShader.hlsl" />
     <FxCompile Include="Shaders\RTShaders.hlsl" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\RTShaders.hlsli" />
+  </ItemGroup>
 </Project>
