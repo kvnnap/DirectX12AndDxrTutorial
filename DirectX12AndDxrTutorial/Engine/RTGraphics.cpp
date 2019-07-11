@@ -90,8 +90,18 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
+	
+
+	scene.loadScene("CornellBox-Original.obj");
+
+	const auto& geometry = scene.getVertices();
+
+	pCurrentCommandList = pCommandQueue->getCommandList();
+
+	Shaders::ConstBuff cBuff = {};
+
 	// Setup camera - Simulating Nikon's one
-	Shaders::Camera shaderCamera = {};
+	Shaders::Camera& shaderCamera = cBuff.camera;
 	shaderCamera.position = camera->getPosition();
 	shaderCamera.direction = camera->getDirection();
 	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
@@ -100,19 +110,17 @@ void Engine::RTGraphics::init()
 	shaderCamera.objectPlane.distance = 0.018f;
 	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
 
-	scene.loadScene("CornellBox-Original.obj");
+	// Setup area lights
+	cBuff.numLights = scene.getLights().size();
+	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
 
-	const auto& geometry = scene.getVertices();
-
-	pCurrentCommandList = pCommandQueue->getCommandList();
-
-	wrl::ComPtr<ID3D12Resource> cameraIntBuffer;
+	wrl::ComPtr<ID3D12Resource> cBuffIntBuffer;
 	pConstantBuffer = DXUtil::uploadDataToDefaultHeap(
 		pDevice,
 		pCurrentCommandList,
-		cameraIntBuffer,
-		&shaderCamera,
-		sizeof(shaderCamera),
+		cBuffIntBuffer,
+		&cBuff,
+		sizeof(cBuff),
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	std::vector<wrl::ComPtr<ID3D12Resource>> intermediateBuffers;
@@ -173,7 +181,7 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 void Engine::RTGraphics::draw(uint64_t timeMs)
 {
 	// Transform vertices in TLAS
-	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 2000) / 2000.f * 6.28f, true, tlasBuffers);
+	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 8000) / 8000.f * 6.28f, true, tlasBuffers);
 
 	// bind empty root signature 
 	pCurrentCommandList->SetComputeRootSignature(globalEmptyRootSignature.Get());
@@ -369,7 +377,7 @@ void Engine::RTGraphics::createMaterialsAndFaceAttributes()
 		pCurrentCommandList,
 		pTlasTempBuffer[0],
 		scene.getMaterials().data(),
-		sizeof(Material) * scene.getMaterials().size(),
+		sizeof(Shaders::Material) * scene.getMaterials().size(),
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	// Get Face attributes

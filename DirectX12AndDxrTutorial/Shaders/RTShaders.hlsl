@@ -10,7 +10,7 @@ RWTexture2D<float4> gOutput : register(u0);
 
 cbuffer CB1 : register(b0) 
 {
-	Camera camera;
+	ConstBuff cBuffer;
 }
 
 float3 linearToSrgb(float3 c)
@@ -21,6 +21,14 @@ float3 linearToSrgb(float3 c)
 	float3 sq3 = sqrt(sq2);
 	float3 srgb = 0.662002687 * sq1 + 0.684122060 * sq2 - 0.323583601 * sq3 - 0.0225411470 * c;
 	return srgb;
+}
+
+float3 getUnitNormal(float3 a0, float3 a1, float3 a2) {
+	return normalize(cross(a1 - a0, a2 - a0));
+}
+
+float3 getUnitNormal(float3 a[3]) {
+	return getUnitNormal(a[0], a[1], a[2]);
 }
 
 struct RayPayload
@@ -42,21 +50,21 @@ void rayGen()
 
 	// calculate u,v,w
 	float3 u, v, w;
-	w = normalize(camera.direction);
-	u = -normalize(cross(camera.up, camera.direction));
+	w = normalize(cBuffer.camera.direction);
+	u = -normalize(cross(cBuffer.camera.up, cBuffer.camera.direction));
 	v = -normalize(cross(w, u));
 
 	// point on film plane
 	float2 r = pt / dims;
 	float3 objectPlanePosition = float3(
-		camera.objectPlane.width * (r.x - 0.5f), 
-		camera.objectPlane.height * (0.5f - r.y), 
+		cBuffer.camera.objectPlane.width * (r.x - 0.5f), 
+		cBuffer.camera.objectPlane.height * (0.5f - r.y), 
 		0.f);
 
 	// Setup Ray
 	RayDesc ray;
-	ray.Origin = camera.position;
-	ray.Direction = (w * camera.objectPlane.distance + u * objectPlanePosition.x + v * objectPlanePosition.y);
+	ray.Origin = cBuffer.camera.position;
+	ray.Direction = (w * cBuffer.camera.objectPlane.distance + u * objectPlanePosition.x + v * objectPlanePosition.y);
 	ray.TMin = 0.f;
 	ray.TMax = 3.402823e+38;
 
@@ -90,7 +98,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
 	// assume point light
-	const float3 lightPos = float3(0.f, 1.96f, 0.f);
+	const float3 lightPos = (float3) cBuffer.areaLights[0].a[0];
 	float3 lightDirLarge = lightPos - interPoint;
 
 	// Setup Shadow Ray
@@ -98,7 +106,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	ray.Origin = interPoint;
 	ray.Direction = lightDirLarge;
 	ray.TMin = 0.001f;
-	ray.TMax = 0.99f;
+	ray.TMax = 0.999999f;
 
 	TraceRay(
 		gRtScene,	// Acceleration Structure
@@ -118,33 +126,16 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 lightDir = normalize(lightDirLarge);
 
 	// Face normal
-	uint index = pIndex * 3;
-	float3 a0 = verts.Load(index);
-	float3 a1 = verts.Load(index + 1);
-	float3 a2 = verts.Load(index + 2);
-
-	float3 normal = normalize(cross(a1 - a0, a2 - a0));
+	const uint index = pIndex * 3;
+	float3 normal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
 
 	float coeff = saturate(dot(lightDir, normal));
 
-	//payload.color = float3(1.f, 0.f, 0.f);
-	//float3 barycentrics = float3(1.f - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
-
-	//payload.color = cols[0] * barycentrics.x + cols[1] * barycentrics.y + cols[2] * barycentrics.z;
-	//payload.color = cols[PrimitiveIndex() % 3];
-	//payload.color = float3(1, 1, 1);
-
-	// Get material
 	FaceAttributes f = faceAttributes.Load(pIndex);
+	Material m = materials[f.materialId];
+	Material lightMaterial = materials[cBuffer.areaLights[0].materialId];
 
-	payload.color = coeff * (float3)materials[f.materialId].diffuse;
-	//payload.color = normal;
-
-	/*const float3 A = float3(1, 0, 0);
-	const float3 B = float3(0, 1, 0);
-	const float3 C = float3(0, 0, 1);
-
-	payload.color = A * barycentrics.x + B * barycentrics.y + C * barycentrics.z;*/
+	payload.color = (m.emission.x == 0 ? coeff : 1.f) *  ((float3)lightMaterial.emission * (float3)m.diffuse);
 }
 
 [shader("closesthit")]
