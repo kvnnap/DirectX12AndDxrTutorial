@@ -27,8 +27,12 @@ float3 getUnitNormal(float3 a0, float3 a1, float3 a2) {
 	return normalize(cross(a1 - a0, a2 - a0));
 }
 
-float3 getUnitNormal(float3 a[3]) {
-	return getUnitNormal(a[0], a[1], a[2]);
+//float3 getUnitNormal(float3 a[3]) {
+//	return getUnitNormal(a[0], a[1], a[2]);
+//}
+
+float3 getCentroid(float3 a[3]) {
+	return (a[0] + a[1] + a[2]) / 3.f;
 }
 
 struct RayPayload
@@ -98,7 +102,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
 	// assume point light
-	const float3 lightPos = (float3) cBuffer.areaLights[0].a[0];
+	const float3 lightPos = getCentroid((float3[3]) cBuffer.areaLights[0].a) - float3(0,0.02,0);
 	float3 lightDirLarge = lightPos - interPoint;
 
 	// Setup Shadow Ray
