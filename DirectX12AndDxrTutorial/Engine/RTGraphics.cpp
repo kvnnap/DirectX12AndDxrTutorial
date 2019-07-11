@@ -70,6 +70,15 @@ RTGraphics::RTGraphics(HWND hWnd)
 	pRTVDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	auto backBuffers = DXUtil::createRenderTargetViews(pDevice, pRTVDescriptorHeap, pSwapChain, std::size(pBackBuffers));
 	std::copy(backBuffers.begin(), backBuffers.end(), pBackBuffers);
+
+	// Init camera
+	camera = make_unique<Camera>(
+		dx::XMVectorSet(0.f, 1.f, 3.5f, 1.f),
+		dx::XMVectorSet(0.f, 0.f, -1.f, 0.f),
+		(float)winWidth / winHeight,
+		1.0f,
+		1.f,
+		10.f);
 }
 
 Engine::RTGraphics::~RTGraphics()
@@ -81,18 +90,30 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
+	// Setup camera - Simulating Nikon's one
+	Shaders::Camera shaderCamera = {};
+	shaderCamera.position = camera->getPosition();
+	shaderCamera.direction = camera->getDirection();
+	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
+	shaderCamera.objectPlane.width = 0.0235f;
+	shaderCamera.objectPlane.height = 0.0156f;
+	shaderCamera.objectPlane.distance = 0.018f;
+	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
+
 	scene.loadScene("CornellBox-Original.obj");
 
 	const auto& geometry = scene.getVertices();
 
-	// Upload Geometry
-	/*DirectX::XMFLOAT3 triangle[3] = {
-		DirectX::XMFLOAT3(    0.f,   1.f, 0.f),
-		DirectX::XMFLOAT3( 0.866f, -0.5f, 0.f),
-		DirectX::XMFLOAT3(-0.866f, -0.5f, 0.f)
-	};*/
-
 	pCurrentCommandList = pCommandQueue->getCommandList();
+
+	wrl::ComPtr<ID3D12Resource> cameraIntBuffer;
+	pConstantBuffer = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		cameraIntBuffer,
+		&shaderCamera,
+		sizeof(shaderCamera),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	std::vector<wrl::ComPtr<ID3D12Resource>> intermediateBuffers;
 	intermediateBuffers.resize(geometry.size());
@@ -240,10 +261,12 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE, 1) //gRtScene
 	};
 	
-	CD3DX12_ROOT_PARAMETER1 rootParameter;
-	rootParameter.InitAsDescriptorTable(descriptorRanges.size(), descriptorRanges.data());
+	std::vector<CD3DX12_ROOT_PARAMETER1> rayGenRootParams;
+	rayGenRootParams.resize(2);
+	rayGenRootParams[0].InitAsDescriptorTable(descriptorRanges.size(), descriptorRanges.data());
+	rayGenRootParams[1].InitAsConstantBufferView(0);
 	
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc(1, &rootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc(rayGenRootParams.size(), rayGenRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 	wrl::ComPtr<ID3D12RootSignature> rootSignature = DXUtil::createRootSignature(pDevice, rootSignatureDesc);
 
 	// Set the local root signature sub object
@@ -268,11 +291,11 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
 
 	// Create root signature having constant buffer and SRV
-	std::vector< CD3DX12_ROOT_PARAMETER1> chsRootParams;
+	std::vector<CD3DX12_ROOT_PARAMETER1> chsRootParams;
 	chsRootParams.resize(5);
 	chsRootParams[0].InitAsConstantBufferView(0);
 	chsRootParams[1].InitAsShaderResourceView(1);
-	chsRootParams[2] = rootParameter;
+	chsRootParams[2] = rayGenRootParams[0];
 	chsRootParams[3].InitAsShaderResourceView(2);
 	chsRootParams[4].InitAsShaderResourceView(3);
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
@@ -392,6 +415,9 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
 	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
 
+	auto cbHandle = pConstantBuffer->GetGPUVirtualAddress();
+	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8, &cbHandle, sizeof(cbHandle));
+
 	size_t faceAttributeIndex = 0;
 
 	for (i = 0; i < hitGroupRecords; ++i) {
@@ -402,8 +428,8 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 
 		memcpy(address, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 
-		// Fill in Entry 2 - CBV entry - need to change to use it for camera..
-		auto handle = pMaterials->GetGPUVirtualAddress() + i * sizeof(Material);
+		// Fill in Entry 2 - CBV entry
+		auto handle = pConstantBuffer->GetGPUVirtualAddress();
 		memcpy(address += D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &handle, sizeof(handle));
 
 		// Vertices ptr

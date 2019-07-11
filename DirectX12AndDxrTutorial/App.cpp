@@ -24,7 +24,7 @@ int App::execute() noexcept
 	try
 	{
 		keyboard = make_unique<Keyboard>();
-		window = make_unique<Window>("DX12 & DXR Tutorial", 640, 480, keyboard.get());
+		window = make_unique<Window>("DX12 & DXR Tutorial", 900, 600, keyboard.get());
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
 		renderer->init();
 

@@ -8,9 +8,9 @@ StructuredBuffer<Material> materials : register(t3);
 // Output texture
 RWTexture2D<float4> gOutput : register(u0);
 
-cbuffer TriCol : register(b0) 
+cbuffer CB1 : register(b0) 
 {
-	Material material;
+	Camera camera;
 }
 
 float3 linearToSrgb(float3 c)
@@ -37,20 +37,28 @@ void rayGen()
 	// dimensions - the previous x,y point is contained within these dimensions
 	uint3 launchDim = DispatchRaysDimensions();
 
-	float2 pt = float2(launchIndex.xy);
-	float2 dims = float2(launchDim.xy);
+	const float2 pt = float2(launchIndex.xy);
+	const float2 dims = float2(launchDim.xy);
 
-	// Point is now in range -1,1
-	float2 ndc = (pt / dims) * 2.f - 1.f;
+	// calculate u,v,w
+	float3 u, v, w;
+	w = normalize(camera.direction);
+	u = -normalize(cross(camera.up, camera.direction));
+	v = -normalize(cross(w, u));
 
-	float aspectRatio = dims.x / dims.y;
+	// point on film plane
+	float2 r = pt / dims;
+	float3 objectPlanePosition = float3(
+		camera.objectPlane.width * (r.x - 0.5f), 
+		camera.objectPlane.height * (0.5f - r.y), 
+		0.f);
 
 	// Setup Ray
 	RayDesc ray;
-	ray.Origin = float3(0.f, 1.f, 2.0f);
-	ray.Direction = normalize(float3(ndc.x * aspectRatio, -ndc.y, -1.f));
+	ray.Origin = camera.position;
+	ray.Direction = (w * camera.objectPlane.distance + u * objectPlanePosition.x + v * objectPlanePosition.y);
 	ray.TMin = 0.f;
-	ray.TMax = 1000.f;
+	ray.TMax = 3.402823e+38;
 
 	// Let's ray trace
 	RayPayload payload;
