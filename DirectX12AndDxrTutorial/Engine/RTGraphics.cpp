@@ -111,7 +111,7 @@ void Engine::RTGraphics::init()
 	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
 
 	// Setup area lights
-	cBuff.numLights = scene.getLights().size();
+	cBuff.numLights = std::min(std::size(cBuff.areaLights), scene.getLights().size());
 	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
 
 	wrl::ComPtr<ID3D12Resource> cBuffIntBuffer;
