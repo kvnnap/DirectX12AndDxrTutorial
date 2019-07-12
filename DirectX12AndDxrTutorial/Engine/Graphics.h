@@ -31,6 +31,7 @@ namespace Engine {
 		void init() override;
 		void draw(uint64_t timeMs = 0) override;
 		void endFrame() override;
+		Camera& getCamera() override;
 
 		void simpleDraw(uint64_t timeMs = 0);
 		int getWinWidth() const;

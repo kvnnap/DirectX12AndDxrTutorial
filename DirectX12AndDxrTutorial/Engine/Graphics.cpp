@@ -306,6 +306,11 @@ void Graphics::endFrame()
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 }
 
+Camera& Engine::Graphics::getCamera()
+{
+	return *camera;
+}
+
 void Engine::Graphics::simpleDraw(uint64_t timeMs)
 {
 	

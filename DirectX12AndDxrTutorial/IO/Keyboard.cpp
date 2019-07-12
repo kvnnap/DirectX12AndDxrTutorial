@@ -34,3 +34,8 @@ bool IO::Keyboard::hasKeyChanged(uint8_t key)
 	cSet.reset(key);
 	return state;
 }
+
+bool IO::Keyboard::anyKeyPressed()
+{
+	return bSet.any();
+}

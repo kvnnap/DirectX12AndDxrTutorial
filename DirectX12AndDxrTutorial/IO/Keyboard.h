@@ -8,7 +8,7 @@
 namespace IO {
 
 	class Keyboard
-		: public IKeyboardWriter, IKeyboardReader
+		: public IKeyboardWriter, public IKeyboardReader
 	{
 	public:
 		Keyboard();
@@ -19,6 +19,7 @@ namespace IO {
 
 		bool isKeyPressed(uint8_t key) override;
 		bool hasKeyChanged(uint8_t key) override;
+		bool anyKeyPressed() override;
 		
 	private:
 		// The current state of the keyboard

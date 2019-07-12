@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "Camera.h"
+
 namespace Engine {
 	class IRenderer {
 	public:
@@ -11,5 +13,7 @@ namespace Engine {
 		virtual void init() = 0;
 		virtual void draw(std::uint64_t timeMs = 0) = 0;
 		virtual void endFrame() = 0;
+
+		virtual Camera& getCamera() = 0;
 	};
 }

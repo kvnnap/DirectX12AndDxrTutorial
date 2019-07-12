@@ -34,6 +34,7 @@ namespace Engine {
 		void init() override;
 		void draw(uint64_t timeMs = 0) override;
 		void endFrame() override;
+		Camera& getCamera() override;
 
 	private:
 
@@ -55,6 +56,7 @@ namespace Engine {
 
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputRTTexture;
+		Microsoft::WRL::ComPtr<ID3D12Resource> radianceTexture;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pConstantBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;

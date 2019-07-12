@@ -100,20 +100,6 @@ void Engine::RTGraphics::init()
 
 	Shaders::ConstBuff cBuff = {};
 
-	// Setup camera - Simulating Nikon's one
-	Shaders::Camera& shaderCamera = cBuff.camera;
-	shaderCamera.position = camera->getPosition();
-	shaderCamera.direction = camera->getDirection();
-	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
-	shaderCamera.objectPlane.width = 0.0235f;
-	shaderCamera.objectPlane.height = 0.0156f;
-	shaderCamera.objectPlane.distance = 0.018f;
-	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
-
-	// Setup area lights
-	cBuff.numLights = std::min(std::size(cBuff.areaLights), scene.getLights().size());
-	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
-
 	wrl::ComPtr<ID3D12Resource> cBuffIntBuffer;
 	pConstantBuffer = DXUtil::uploadDataToDefaultHeap(
 		pDevice,
@@ -183,6 +169,35 @@ void Engine::RTGraphics::draw(uint64_t timeMs)
 	// Transform vertices in TLAS
 	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 8000) / 8000.f * 6.28f, true, tlasBuffers);
 
+	Shaders::ConstBuff cBuff = {};
+
+	// Setup camera - Simulating Nikon's one
+	Shaders::Camera& shaderCamera = cBuff.camera;
+	shaderCamera.position = camera->getPosition();
+	shaderCamera.direction = camera->getDirection();
+	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
+	shaderCamera.objectPlane.width = 0.0235f;
+	shaderCamera.objectPlane.height = 0.0156f;
+	shaderCamera.objectPlane.distance = 0.018f;
+	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
+
+	// Setup area lights
+	cBuff.numLights = std::min(std::size(cBuff.areaLights), scene.getLights().size());
+	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
+
+	// seed
+	cBuff.seed = 0;
+
+	//
+	DXUtil::updateDataInDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		pConstantBuffer,
+		pTlasTempBuffer[pCurrentBackBufferIndex],
+		&cBuff,
+		sizeof(cBuff),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
 	// bind empty root signature 
 	pCurrentCommandList->SetComputeRootSignature(globalEmptyRootSignature.Get());
 	pCurrentCommandList->SetPipelineState1(pStateObject.Get());
@@ -236,6 +251,11 @@ void Engine::RTGraphics::endFrame()
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 }
 
+Camera& Engine::RTGraphics::getCamera()
+{
+	return *camera;
+}
+
 wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 {
 	HRESULT hr;
@@ -265,8 +285,8 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	// Third - Local Root Signature for Ray Gen shader
 	// Build the root signature descriptor and create root signature
 	array<CD3DX12_DESCRIPTOR_RANGE1, 2> descriptorRanges = {
-		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE, 0), //gOutput
-		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE, 1) //gRtScene
+		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE), //gOutput, gRadiance
+		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)  //gRtScene
 	};
 	
 	std::vector<CD3DX12_ROOT_PARAMETER1> rayGenRootParams;
@@ -350,21 +370,27 @@ void Engine::RTGraphics::createShaderResources()
 {
 	// The output resource
 	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
-	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 2, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 3, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
 
 	// Create the UAV descriptor first (needs to be same order as in root signature)
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; // In below, set it at the first location of this heap
-	pDevice->CreateUnorderedAccessView(outputRTTexture.Get(), nullptr, &uavDesc, srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	pDevice->CreateUnorderedAccessView(outputRTTexture.Get(), nullptr, &uavDesc, cpuDescHandle);
+
+	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	pDevice->CreateUnorderedAccessView(radianceTexture.Get(), nullptr, &uavDesc, cpuDescHandle);
 
 	// Create the SRV descriptor in second place (following same order as in root signature)
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.RaytracingAccelerationStructure.Location = tlasBuffers.pResult->GetGPUVirtualAddress();
-	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
 	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
 }

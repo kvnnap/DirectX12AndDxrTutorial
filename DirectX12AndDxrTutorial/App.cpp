@@ -72,8 +72,8 @@ void App::processFrame()
 		keyboard->isKeyPressed('R') ? 1.f : 0.f,
 		keyboard->isKeyPressed('G') ? 1.f : 0.f,
 		keyboard->isKeyPressed('B') ? 1.f : 0.f);
-	/*
-	Engine::Camera& camera = graphics->getCamera();
+	
+	Engine::Camera& camera = renderer->getCamera();
 	const float unitsPerSec = 3.f;
 	float deltaUnits = deltaMs / 1000.f * unitsPerSec;
 
@@ -83,8 +83,7 @@ void App::processFrame()
 	deltaUnits = deltaMs / 1000.f;
 	camera.incrementDirection(getValueIfPressed('L', deltaUnits), getValueIfPressed('I', -deltaUnits));
 	camera.incrementDirection(getValueIfPressed('J', -deltaUnits), getValueIfPressed('K', deltaUnits));
-
-	*/
+	
 	renderer->draw(msLong);
 
 	renderer->endFrame();

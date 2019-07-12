@@ -8,6 +8,7 @@ StructuredBuffer<Material> materials : register(t3);
 
 // Output texture
 RWTexture2D<float4> gOutput : register(u0);
+RWTexture2D<float4> gRadiance : register(u1);
 
 cbuffer CB1 : register(b0) 
 {
@@ -69,7 +70,7 @@ void rayGen()
 		radiance += payload.color;
 	}
 
-	float3 col = linearToSrgb(radiance / iterCount);
+	float3 col = linearToSrgb(radiance);
 	gOutput[launchIndex.xy] = float4(col, 1.f);
 }
 
