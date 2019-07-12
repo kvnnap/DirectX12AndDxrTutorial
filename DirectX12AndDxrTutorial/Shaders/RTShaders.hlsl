@@ -57,7 +57,7 @@ void rayGen()
 	const int iterCount = 1;
 	for (int i = 0; i < iterCount; ++i) {
 		RayPayload payload;
-		payload.color[0] = i + 1;
+		payload.color[0] = gRadiance[launchIndex.xy].w + i + 1; // used as accum
 		TraceRay(
 			gRtScene,	// Acceleration Structure
 			0,			// Ray flags
@@ -70,7 +70,13 @@ void rayGen()
 		radiance += payload.color;
 	}
 
-	float3 col = linearToSrgb(radiance);
+	if (cBuffer.clear) {
+		gRadiance[launchIndex.xy] *= float4(0.f, 0.f, 0.f, 0.f);
+	}
+
+	gRadiance[launchIndex.xy] += float4(radiance, iterCount);
+
+	float3 col = linearToSrgb((float3)gRadiance[launchIndex.xy] / gRadiance[launchIndex.xy].w);
 	gOutput[launchIndex.xy] = float4(col, 1.f);
 }
 

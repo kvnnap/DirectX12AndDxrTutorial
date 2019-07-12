@@ -164,7 +164,7 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 	//pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
 }
 
-void Engine::RTGraphics::draw(uint64_t timeMs)
+void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 {
 	// Transform vertices in TLAS
 	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 8000) / 8000.f * 6.28f, true, tlasBuffers);
@@ -187,6 +187,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs)
 
 	// seed
 	cBuff.seed = 0;
+	cBuff.clear = clear ? 1 : 0;
 
 	//
 	DXUtil::updateDataInDefaultHeap(
@@ -370,7 +371,7 @@ void Engine::RTGraphics::createShaderResources()
 {
 	// The output resource
 	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE, DXGI_FORMAT_R32G32B32A32_FLOAT);
 
 	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
 	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 3, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);

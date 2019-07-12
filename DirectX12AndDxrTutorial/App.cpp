@@ -84,7 +84,7 @@ void App::processFrame()
 	camera.incrementDirection(getValueIfPressed('L', deltaUnits), getValueIfPressed('I', -deltaUnits));
 	camera.incrementDirection(getValueIfPressed('J', -deltaUnits), getValueIfPressed('K', deltaUnits));
 	
-	renderer->draw(msLong);
+	renderer->draw(msLong, keyboard->anyKeyPressed());
 
 	renderer->endFrame();
 

@@ -40,7 +40,8 @@ namespace Shaders {
 		AreaLight areaLights[8];
 		std::uint32_t numLights;
 		std::uint32_t seed;
-		float padding[2];
+		std::uint32_t clear;
+		float padding[1];
 	};
 }
 #else
@@ -80,6 +81,7 @@ struct ConstBuff {
 	AreaLight areaLights[8];
 	uint numLights;
 	uint seed;
+	uint clear;
 };
 #endif
 
