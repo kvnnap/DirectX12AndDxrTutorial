@@ -172,5 +172,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\RTShaders.hlsli" />
+    <None Include="Shaders\Utils.hlsli" />
   </ItemGroup>
 </Project>

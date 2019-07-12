@@ -1,4 +1,5 @@
 #include "RTShaders.hlsli"
+#include "Utils.hlsli"
 
 RaytracingAccelerationStructure gRtScene : register(t0);
 StructuredBuffer<float3> verts : register(t1);
@@ -11,28 +12,6 @@ RWTexture2D<float4> gOutput : register(u0);
 cbuffer CB1 : register(b0) 
 {
 	ConstBuff cBuffer;
-}
-
-float3 linearToSrgb(float3 c)
-{
-	// Based on http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
-	float3 sq1 = sqrt(c);
-	float3 sq2 = sqrt(sq1);
-	float3 sq3 = sqrt(sq2);
-	float3 srgb = 0.662002687 * sq1 + 0.684122060 * sq2 - 0.323583601 * sq3 - 0.0225411470 * c;
-	return srgb;
-}
-
-float3 getUnitNormal(float3 a0, float3 a1, float3 a2) {
-	return normalize(cross(a1 - a0, a2 - a0));
-}
-
-//float3 getUnitNormal(float3 a[3]) {
-//	return getUnitNormal(a[0], a[1], a[2]);
-//}
-
-float3 getCentroid(float3 a[3]) {
-	return (a[0] + a[1] + a[2]) / 3.f;
 }
 
 struct RayPayload
@@ -98,14 +77,25 @@ void miss(inout RayPayload payload)
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
 	uint pIndex = PrimitiveIndex();
+	uint3 d = DispatchRaysIndex();
+	uint seed = rand_init(d.x, d.y);
 
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
-	AreaLight a = cBuffer.areaLights[cBuffer.numLights - 1];
+	AreaLight a = cBuffer.areaLights[chooseInRange(seed,0,0)];
 
 	// assume point light
 	const float3 lightPos = getCentroid((float3[3]) a.a);
 	float3 lightDirLarge = lightPos - interPoint;
+	float3 lightDir = normalize(lightDirLarge);
+
+	// compute area light normal
+	float3 lightNormal = getUnitNormal((float3[3]) a.a);
+
+	if (dot(lightNormal, lightDir) >= 0.f) {
+		payload.color = float3(0.f, 0.f, 0.f);
+		return;
+	}
 
 	// Setup Shadow Ray
 	RayDesc ray;
@@ -130,8 +120,6 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		return;
 	}
 
-	float3 lightDir = normalize(lightDirLarge);
-
 	// Face normal
 	const uint index = pIndex * 3;
 	float3 normal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
@@ -142,7 +130,8 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	Material m = materials[f.materialId];
 	Material lightMaterial = materials[a.materialId];
 
-	payload.color = (m.emission.x == 0 ? coeff : 1.f) *  ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
+	//payload.color = (m.emission.x == 0 ? coeff : 1.f) * ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
+	payload.color = coeff * ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
 }
 
 [shader("closesthit")]
