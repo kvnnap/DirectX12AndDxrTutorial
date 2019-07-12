@@ -71,6 +71,7 @@ struct AreaLight {
 	float4 a[3];
 	float4 intensity;
 	uint materialId;
+	uint3 padding;
 };
 
 struct ConstBuff {
