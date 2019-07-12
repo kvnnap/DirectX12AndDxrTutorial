@@ -28,7 +28,7 @@ namespace Shaders {
 	};
 
 	struct AreaLight {
-		DirectX::XMFLOAT4 a[3];
+		DirectX::XMVECTOR a[3];
 		DirectX::XMVECTOR intensity;
 
 		std::uint32_t materialId;

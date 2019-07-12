@@ -93,6 +93,8 @@ void Engine::RTGraphics::init()
 	
 
 	scene.loadScene("CornellBox-Original.obj");
+	//scene.flattenGroups();
+	scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02, 0.f));
 
 	const auto& geometry = scene.getVertices();
 

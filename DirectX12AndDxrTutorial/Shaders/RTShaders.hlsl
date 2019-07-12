@@ -101,7 +101,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
-	AreaLight a = cBuffer.areaLights[1];
+	AreaLight a = cBuffer.areaLights[0];
 
 	// assume point light
 	const float3 lightPos = getCentroid((float3[3]) a.a);

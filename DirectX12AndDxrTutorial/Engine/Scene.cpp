@@ -59,7 +59,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 				vertices[shapeNum].push_back(vertex);
 
 				if (isEmissive) {
-					areaLight.a[v] = DirectX::XMFLOAT4(vertex.x, vertex.y, vertex.z, 1.f);
+					areaLight.a[v] = DirectX::XMVectorSet(vertex.x, vertex.y, vertex.z, 1.f);
 				}
 			}
 
@@ -81,6 +81,26 @@ void Engine::Scene::loadScene(const string& pathToObj)
 
 		++shapeNum;
 	}
+}
+
+void Engine::Scene::transformLightPosition(const DirectX::XMMATRIX& mat)
+{
+	for (auto& light : lights) {
+		for (std::size_t i = 0; i < std::size(light.a); ++i) {
+			light.a[i] = DirectX::XMVector3Transform(light.a[i], mat);
+		}
+	}
+}
+
+void Engine::Scene::flattenGroups()
+{
+	std::vector<DirectX::XMFLOAT3> verts;
+	for (const std::vector<DirectX::XMFLOAT3>& v : vertices) {
+		verts.insert(verts.end(), v.begin(), v.end());
+	}
+
+	vertices.clear();
+	vertices.push_back(verts);
 }
 
 const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() const
