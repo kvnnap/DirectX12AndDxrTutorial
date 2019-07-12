@@ -154,12 +154,18 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	const uint pIndex = PrimitiveIndex();
 	const uint index = pIndex * 3;
 	FaceAttributes f = faceAttributes.Load(pIndex);
-
-	const uint3 d = DispatchRaysIndex();
-	uint seed = rand_init(d.x * (uint)payload.color[0], d.y * (uint)payload.color[0]);
 	
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 	float3 unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
+	float3 dir = normalize(WorldRayDirection());
+
+	if (dot(dir, unitNormal) >= 0.f) {
+		payload.color = float3(0.f, 0.f, 0.f);
+		return;
+	}
+
+	const uint3 d = DispatchRaysIndex();
+	uint seed = rand_init(d.x * (uint)payload.color[0], d.y * (uint)payload.color[0]);
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
 	payload.color = explicitLighting(seed, interPoint, unitNormal, f.materialId);

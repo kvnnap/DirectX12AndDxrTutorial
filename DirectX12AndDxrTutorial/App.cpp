@@ -77,12 +77,12 @@ void App::processFrame()
 	const float unitsPerSec = 3.f;
 	float deltaUnits = deltaMs / 1000.f * unitsPerSec;
 
-	camera.incrementPositionAlongDirection(getValueIfPressed('D', deltaUnits), getValueIfPressed('W', deltaUnits));
-	camera.incrementPositionAlongDirection(getValueIfPressed('A', -deltaUnits), getValueIfPressed('S', -deltaUnits));
+	camera.incrementPositionAlongDirection(getValueIfPressed('D', -deltaUnits), getValueIfPressed('W', deltaUnits));
+	camera.incrementPositionAlongDirection(getValueIfPressed('A', deltaUnits), getValueIfPressed('S', -deltaUnits));
 
 	deltaUnits = deltaMs / 1000.f;
-	camera.incrementDirection(getValueIfPressed('L', deltaUnits), getValueIfPressed('I', -deltaUnits));
-	camera.incrementDirection(getValueIfPressed('J', -deltaUnits), getValueIfPressed('K', deltaUnits));
+	camera.incrementDirection(getValueIfPressed('L', -deltaUnits), getValueIfPressed('I', -deltaUnits));
+	camera.incrementDirection(getValueIfPressed('J', deltaUnits), getValueIfPressed('K', deltaUnits));
 	
 	renderer->draw(msLong, keyboard->anyKeyPressed());
 
