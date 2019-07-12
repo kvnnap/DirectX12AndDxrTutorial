@@ -65,7 +65,8 @@ void Engine::Scene::loadScene(const string& pathToObj)
 
 			if (isEmissive) {
 				areaLight.materialId = materialId;
-				areaLight.intensity = 1.f;
+				areaLight.intensity = DirectX::XMVectorSet(1.f, 1.f, 1.f, 1.f);
+				//areaLight.intensity = DirectX::XMVectorScale(areaLight.intensity, 0.1f);
 				lights.push_back(areaLight);
 			}
 

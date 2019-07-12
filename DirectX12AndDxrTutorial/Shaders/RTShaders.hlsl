@@ -101,8 +101,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
+	AreaLight a = cBuffer.areaLights[1];
+
 	// assume point light
-	const float3 lightPos = getCentroid((float3[3]) cBuffer.areaLights[0].a) - float3(0,0.02,0);
+	const float3 lightPos = getCentroid((float3[3]) a.a);
 	float3 lightDirLarge = lightPos - interPoint;
 
 	// Setup Shadow Ray
@@ -110,7 +112,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	ray.Origin = interPoint;
 	ray.Direction = lightDirLarge;
 	ray.TMin = 0.001f;
-	ray.TMax = 0.999999f;
+	ray.TMax = 0.999f;
 
 	TraceRay(
 		gRtScene,	// Acceleration Structure
@@ -122,6 +124,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		ray,
 		payload);
 
+	// Use instead: payload.color = -(payload.color - float3(1.f, 1.f, 1.f));
 	if (payload.color[0] == 1.f) {
 		payload.color = float3(0.f, 0.f, 0.f);
 		return;
@@ -137,13 +140,13 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
 	FaceAttributes f = faceAttributes.Load(pIndex);
 	Material m = materials[f.materialId];
-	Material lightMaterial = materials[cBuffer.areaLights[0].materialId];
+	Material lightMaterial = materials[a.materialId];
 
-	payload.color = (m.emission.x == 0 ? coeff : 1.f) *  ((float3)lightMaterial.emission * (float3)m.diffuse);
+	payload.color = (m.emission.x == 0 ? coeff : 1.f) *  ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
 }
 
 [shader("closesthit")]
 void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.color = float3(1.f, 0.f, 0.f);
+	payload.color = float3(1.f, 1.f, 1.f);
 }
