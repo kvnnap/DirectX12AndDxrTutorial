@@ -31,7 +31,7 @@ uint chooseInRange(inout uint s, uint a, uint b) {
 	return a + uint(rand_next(s) * (b - a + 1));
 }
 
-const float PI = 3.14159265f;
+static const float PI = 3.14159265f;
 
 float3 samplePointOnTriangle(inout uint s, float3 verts[3]) {
 	float r1 = rand_next(s);
@@ -50,6 +50,14 @@ float3 samplePointOnTriangle(inout uint s, float3 verts[3]) {
 	float3 Q2 = verts[2] - verts[0];
 
 	return verts[0] + r1 * Q1 + r2 * Q2;
+}
+
+float getTriangleArea(float3 verts[3]) {
+	const float3 Q1 = verts[1] - verts[0];
+	const float3 Q2 = verts[2] - verts[0];
+	const float Q1Q2 = dot(Q1, Q2);
+
+	return 0.5f * length(Q1) * length(Q2) * sqrt(1.f - (Q1Q2 * Q1Q2 / (dot(Q1, Q1) * dot(Q2, Q2))));
 }
 
 float3 getUnitNormal(float3 a0, float3 a1, float3 a2) {

@@ -52,19 +52,25 @@ void rayGen()
 	ray.TMax = 3.402823e+38;
 
 	// Let's ray trace
-	RayPayload payload;
-	TraceRay(
-		gRtScene,	// Acceleration Structure
-		0,			// Ray flags
-		0xFF,		// Instance inclusion Mask (0xFF includes everything)
-		0,			// RayContributionToHitGroupIndex
-		2,			// MultiplierForGeometryContributionToShaderIndex
-		0,			// Miss shader index (within the shader table)
-		ray,
-		payload);
+	float3 radiance = float3(0.f, 0.f, 0.f);
+	const int iterCount = 1;
+	for (int i = 0; i < iterCount; ++i) {
+		RayPayload payload;
+		payload.color[0] = i + 1;
+		TraceRay(
+			gRtScene,	// Acceleration Structure
+			0,			// Ray flags
+			0xFF,		// Instance inclusion Mask (0xFF includes everything)
+			0,			// RayContributionToHitGroupIndex
+			2,			// MultiplierForGeometryContributionToShaderIndex
+			0,			// Miss shader index (within the shader table)
+			ray,
+			payload);
+		radiance += payload.color;
+	}
 
-	float3 col = linearToSrgb(payload.color);
-	gOutput[launchIndex.xy] = float4(col, 1);
+	float3 col = linearToSrgb(radiance / iterCount);
+	gOutput[launchIndex.xy] = float4(col, 1.f);
 }
 
 [shader("miss")]
@@ -73,37 +79,37 @@ void miss(inout RayPayload payload)
 	payload.color = float3(0.f, 0.f, 0.f);
 }
 
-[shader("closesthit")]
-void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
-{
-	uint pIndex = PrimitiveIndex();
-	uint3 d = DispatchRaysIndex();
-	uint seed = rand_init(d.x, d.y);
+float3 explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId) {
+	float3 radiance = float3(0.f, 0.f, 0.f);
+	float lightPdf = 1.f / cBuffer.numLights;
+	
+	AreaLight areaLight = cBuffer.areaLights[chooseInRange(seed, 0, cBuffer.numLights - 1)];
 
-	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-
-	AreaLight a = cBuffer.areaLights[chooseInRange(seed,0,0)];
-
-	// assume point light
-	const float3 lightPos = getCentroid((float3[3]) a.a);
-	float3 lightDirLarge = lightPos - interPoint;
+	float3 pointOnLightSource = samplePointOnTriangle(seed, (float3[3])areaLight.a);
+	float3 lightDirLarge = pointOnLightSource - interPoint;
 	float3 lightDir = normalize(lightDirLarge);
 
-	// compute area light normal
-	float3 lightNormal = getUnitNormal((float3[3]) a.a);
+	// Check if light is behind the primitive (back face)
+	float primitiveShadowDot = dot(unitNormal, lightDir);
+	if (primitiveShadowDot <= 0.f) {
+		return radiance;
+	}
 
-	if (dot(lightNormal, lightDir) >= 0.f) {
-		payload.color = float3(0.f, 0.f, 0.f);
-		return;
+	// Check if primitive is behind the light (back face)
+	float3 lightUnitNormal = getUnitNormal((float3[3]) areaLight.a);
+	float lightShadowDot = dot(lightUnitNormal, -lightDir);
+	if (lightShadowDot <= 0.f) {
+		return radiance;
 	}
 
 	// Setup Shadow Ray
-	RayDesc ray;
-	ray.Origin = interPoint;
-	ray.Direction = lightDirLarge;
-	ray.TMin = 0.001f;
-	ray.TMax = 0.999f;
+	RayDesc shadowRay;
+	shadowRay.Origin = interPoint;
+	shadowRay.Direction = lightDirLarge;
+	shadowRay.TMin = 0.001f;
+	shadowRay.TMax = 0.999f;
 
+	RayPayload payload;
 	TraceRay(
 		gRtScene,	// Acceleration Structure
 		0,			// Ray flags
@@ -111,27 +117,45 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		1,			// RayContributionToHitGroupIndex
 		2,			// MultiplierForGeometryContributionToShaderIndex
 		0,			// Miss shader index (within the shader table)
-		ray,
+		shadowRay,
 		payload);
 
-	// Use instead: payload.color = -(payload.color - float3(1.f, 1.f, 1.f));
+	// We're occluded, return
 	if (payload.color[0] == 1.f) {
-		payload.color = float3(0.f, 0.f, 0.f);
-		return;
+		return radiance;
 	}
 
-	// Face normal
+	// Get light radiance
+	float3 lightRadiance = (float3)(areaLight.intensity * materials[areaLight.materialId].emission);
+
+	// Get projected area
+	float lightDistance = length(lightDirLarge);
+	float projectedArea = getTriangleArea((float3[3]) areaLight.a) * lightShadowDot / (lightDistance * lightDistance);
+
+	// Get diffuse of intersected material
+	float3 diffuse = (float3)materials[materialId].diffuse;
+
+	radiance = lightRadiance * diffuse;
+	radiance *= primitiveShadowDot * projectedArea  / (PI * lightPdf);
+
+	return radiance;
+}
+
+[shader("closesthit")]
+void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+	const uint pIndex = PrimitiveIndex();
 	const uint index = pIndex * 3;
-	float3 normal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
-
-	float coeff = saturate(dot(lightDir, normal));
-
 	FaceAttributes f = faceAttributes.Load(pIndex);
-	Material m = materials[f.materialId];
-	Material lightMaterial = materials[a.materialId];
 
-	//payload.color = (m.emission.x == 0 ? coeff : 1.f) * ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
-	payload.color = coeff * ((float3)a.intensity * (float3)lightMaterial.emission * (float3)m.diffuse);
+	const uint3 d = DispatchRaysIndex();
+	uint seed = rand_init(d.x * (uint)payload.color[0], d.y * (uint)payload.color[0]);
+	
+	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+	float3 unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
+
+	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
+	payload.color = explicitLighting(seed, interPoint, unitNormal, f.materialId);
 }
 
 [shader("closesthit")]
