@@ -58,6 +58,8 @@ void rayGen()
 	for (int i = 0; i < iterCount; ++i) {
 		RayPayload payload;
 		payload.color[0] = gRadiance[launchIndex.xy].w + i + 1; // used as accum
+		payload.color[1] = cBuffer.seed1;
+		payload.color[2] = cBuffer.seed2;
 		TraceRay(
 			gRtScene,	// Acceleration Structure
 			0,			// Ray flags
@@ -165,7 +167,9 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	}
 
 	const uint3 d = DispatchRaysIndex();
-	uint seed = rand_init(d.x * (uint)payload.color[0], d.y * (uint)payload.color[0]);
+	uint seed = rand_init(
+		(uint)payload.color[1] + d.x * (uint)payload.color[0],
+		(uint)payload.color[2] + d.y * (uint)payload.color[0]);
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
 	payload.color = explicitLighting(seed, interPoint, unitNormal, f.materialId);

@@ -39,9 +39,9 @@ namespace Shaders {
 		Camera camera;
 		AreaLight areaLights[8];
 		std::uint32_t numLights;
-		std::uint32_t seed;
+		std::uint32_t seed1;
+		std::uint32_t seed2;
 		std::uint32_t clear;
-		float padding[1];
 	};
 }
 #else
@@ -80,7 +80,8 @@ struct ConstBuff {
 	Camera camera;
 	AreaLight areaLights[8];
 	uint numLights;
-	uint seed;
+	uint seed1;
+	uint seed2;
 	uint clear;
 };
 #endif

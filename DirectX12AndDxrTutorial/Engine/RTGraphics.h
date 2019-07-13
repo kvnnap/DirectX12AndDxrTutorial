@@ -19,6 +19,7 @@
 #include "IRenderer.h"
 
 #include "Scene.h"
+#include "UniformSampler.h"
 
 namespace Engine {
 	class RTGraphics 
@@ -91,5 +92,6 @@ namespace Engine {
 		std::unique_ptr<Camera> camera;
 
 		Scene scene;
+		UniformSampler sampler;
 	};
 }

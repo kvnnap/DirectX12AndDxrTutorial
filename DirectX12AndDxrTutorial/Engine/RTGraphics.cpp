@@ -186,7 +186,8 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
 
 	// seed
-	cBuff.seed = 0;
+	cBuff.seed1 = sampler.nextUInt32();
+	cBuff.seed2 = sampler.nextUInt32();
 	cBuff.clear = clear ? 1 : 0;
 
 	//
