@@ -20,6 +20,12 @@ struct RayPayload
 	float3 color;
 };
 
+struct IndirectPayload
+{
+	uint primitiveId;
+	float tHit;
+};
+
 [shader("raygeneration")]
 void rayGen()
 {
@@ -65,7 +71,7 @@ void rayGen()
 			0,			// Ray flags
 			0xFF,		// Instance inclusion Mask (0xFF includes everything)
 			0,			// RayContributionToHitGroupIndex
-			2,			// MultiplierForGeometryContributionToShaderIndex
+			3,			// MultiplierForGeometryContributionToShaderIndex
 			0,			// Miss shader index (within the shader table)
 			ray,
 			payload);
@@ -116,7 +122,7 @@ float3 explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, u
 	shadowRay.Origin = interPoint;
 	shadowRay.Direction = lightDirLarge;
 	shadowRay.TMin = 0.001f;
-	shadowRay.TMax = 0.999f;
+	shadowRay.TMax = 0.99f;
 
 	RayPayload payload;
 	TraceRay(
@@ -124,7 +130,7 @@ float3 explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, u
 		0,			// Ray flags
 		0xFF,		// Instance inclusion Mask (0xFF includes everything)
 		1,			// RayContributionToHitGroupIndex
-		2,			// MultiplierForGeometryContributionToShaderIndex
+		3,			// MultiplierForGeometryContributionToShaderIndex
 		0,			// Miss shader index (within the shader table)
 		shadowRay,
 		payload);
@@ -150,6 +156,64 @@ float3 explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, u
 	return radiance;
 }
 
+float3 indirectLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId) {
+	float3 rad = float3(0.f, 0.f, 0.f);
+	
+	// Get cosine-weighted ray
+	RayDesc indirectRay;
+	indirectRay.Origin = interPoint;
+	indirectRay.Direction = randomRayLobe(seed, unitNormal, 1);
+	indirectRay.TMin = 0.001f;
+	indirectRay.TMax = 3.402823e+38;
+
+	IndirectPayload payload;
+	float3 localCoefficients = float3(1.f, 1.f, 1.f);
+
+	// For use with russian roulette
+	float probabilityOfContinuing;
+
+	// Russian roulette
+	while (rand_next(seed) <= (probabilityOfContinuing = dot(unitNormal, indirectRay.Direction))) {
+		
+		TraceRay(
+			gRtScene,	// Acceleration Structure
+			0,			// Ray flags
+			0xFF,		// Instance inclusion Mask (0xFF includes everything)
+			2,			// RayContributionToHitGroupIndex
+			3,			// MultiplierForGeometryContributionToShaderIndex
+			1,			// Miss shader index (within the shader table)
+			indirectRay,
+			payload);
+
+		// Traceray - get primitiveId & intersection point  (from t value)
+		if (payload.tHit == -1.f) { break; }
+
+		// Compute coefficients for this iteration
+		localCoefficients *= (float3)materials[materialId].diffuse / probabilityOfContinuing;
+
+		// Get intersected face unit normal
+		const uint pIndex = payload.primitiveId;
+		const uint index = pIndex * 3;
+		unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
+		if (dot(indirectRay.Direction, unitNormal) >= 0.f) {
+			break;
+		}
+
+		// Get intersected face material
+		FaceAttributes f = faceAttributes.Load(pIndex);
+		materialId = f.materialId;
+		indirectRay.Origin += payload.tHit * indirectRay.Direction;
+
+		// explicit lighing
+		rad += localCoefficients * explicitLighting(seed, indirectRay.Origin, unitNormal, materialId);
+
+		// Generate next ray
+		indirectRay.Direction = randomRayLobe(seed, unitNormal, 1);
+	}
+
+	return rad;
+}
+
 [shader("closesthit")]
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
@@ -172,11 +236,31 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		(uint)payload.color[2] + d.y * (uint)payload.color[0]);
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
-	payload.color = explicitLighting(seed, interPoint, unitNormal, f.materialId);
+	if (materials[f.materialId].emission.x == 0.f) {
+		payload.color = explicitLighting(seed, interPoint, unitNormal, f.materialId)
+			+ indirectLighting(seed, interPoint, unitNormal, f.materialId)
+			;
+	}
+	else {
+		payload.color = (float3)materials[f.materialId].emission;
+	}
 }
 
 [shader("closesthit")]
 void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
 	payload.color = float3(1.f, 1.f, 1.f);
+}
+
+[shader("closesthit")]
+void indirectChs(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+	payload.primitiveId = PrimitiveIndex();
+	payload.tHit = RayTCurrent();
+}
+
+[shader("miss")]
+void indirectMiss(inout IndirectPayload payload)
+{
+	payload.tHit = -1.f;
 }

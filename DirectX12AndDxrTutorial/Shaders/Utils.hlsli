@@ -113,5 +113,5 @@ float3 randomRayLobe(inout uint s, float3 unitNormal, float n) {
 }
 
 float3 randomRayHemisphere(inout uint s, float3 unitNormal) {
-	return randomRayLobe(s, unitNormal, 1);
+	return randomRayLobe(s, unitNormal, 0);
 }
