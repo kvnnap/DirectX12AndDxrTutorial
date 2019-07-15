@@ -44,17 +44,9 @@ void rayGen()
 	u = -normalize(cross(cBuffer.camera.up, cBuffer.camera.direction));
 	v = -normalize(cross(w, u));
 
-	// point on film plane
-	float2 r = pt / dims;
-	float3 filmPlanePosition = float3(
-		cBuffer.camera.filmPlane.width * (r.x - 0.5f), 
-		cBuffer.camera.filmPlane.height * (0.5f - r.y), 
-		0.f);
-
 	// Setup Ray
 	RayDesc ray;
 	ray.Origin = cBuffer.camera.position;
-	ray.Direction = (w * cBuffer.camera.filmPlane.distance + u * filmPlanePosition.x + v * filmPlanePosition.y);
 	ray.TMin = 0.f;
 	ray.TMax = 3.402823e+38;
 
@@ -62,10 +54,22 @@ void rayGen()
 	float3 radiance = float3(0.f, 0.f, 0.f);
 	const int iterCount = 1;
 	for (int i = 0; i < iterCount; ++i) {
+
+		// Note: Multiplying by iterCount not required if seed is changing on the Host side (not assuming i)
+		uint seed = rand_init(
+			cBuffer.seed1 + launchDim.x * ((uint)gRadiance[launchIndex.xy].w + i) + launchIndex.x,
+			cBuffer.seed2 + launchDim.y * ((uint)gRadiance[launchIndex.xy].w + i) + launchIndex.y);
+
+		// point on film plane
+		float2 r = (pt + float2(rand_next(seed), rand_next(seed))) / dims;
+		float2 filmPlanePosition = float2(
+			cBuffer.camera.filmPlane.width * (r.x - 0.5f),
+			cBuffer.camera.filmPlane.height * (0.5f - r.y));
+		ray.Direction = (w * cBuffer.camera.filmPlane.distance + u * filmPlanePosition.x + v * filmPlanePosition.y);
+
 		RayPayload payload;
-		payload.color[0] = gRadiance[launchIndex.xy].w + i + 1; // used as accum
-		payload.color[1] = cBuffer.seed1;
-		payload.color[2] = cBuffer.seed2;
+		payload.color[0] = asfloat(seed);
+
 		TraceRay(
 			gRtScene,	// Acceleration Structure
 			0,			// Ray flags
@@ -231,9 +235,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	}
 
 	const uint3 d = DispatchRaysIndex();
-	uint seed = rand_init(
-		(uint)payload.color[1] + d.x * (uint)payload.color[0],
-		(uint)payload.color[2] + d.y * (uint)payload.color[0]);
+	uint seed = asuint(payload.color[0]);
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
 	if (materials[f.materialId].emission.x == 0.f) {
