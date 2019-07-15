@@ -20,8 +20,8 @@ private:
 	void processFrame();
 	float getValueIfPressed(char keyPressed, float deltaUnits) const;
 
-	uint64_t frameCounter;
-	long long msec;
+	uint64_t frameCounter, fpsFrameCounter;
+	long long msec, fpsMSec;
 
 	std::unique_ptr<UI::Window> window;
 	std::unique_ptr<IO::Keyboard> keyboard;

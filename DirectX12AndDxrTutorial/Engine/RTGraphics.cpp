@@ -246,7 +246,7 @@ void Engine::RTGraphics::endFrame()
 	pCurrentCommandList.Reset();
 
 	HRESULT hr;
-	GFXTHROWIFFAILED(pSwapChain->Present(1u, 0u));
+	GFXTHROWIFFAILED(pSwapChain->Present(0u, 0u));
 
 	// Set current back buffer and Wait for any fence values associated to it
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();

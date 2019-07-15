@@ -19,7 +19,7 @@ namespace UI {
 		virtual ~Window();
 
 		HWND getHandle() const;
-
+		void setWindowName(const std::string& windowName) const;
 
 		using WNDCALLBACKFN = std::function<LRESULT(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)>;
 		void addWndProcCallback(WNDCALLBACKFN fn);

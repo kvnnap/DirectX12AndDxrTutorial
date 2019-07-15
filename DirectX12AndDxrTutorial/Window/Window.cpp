@@ -129,6 +129,11 @@ HWND Window::getHandle() const
 	return hWnd;
 }
 
+void UI::Window::setWindowName(const std::string& windowName) const
+{
+	SetWindowText(hWnd, windowName.c_str());
+}
+
 void Window::addWndProcCallback(WNDCALLBACKFN a)
 {
 	callbacks.push_back(move(a));

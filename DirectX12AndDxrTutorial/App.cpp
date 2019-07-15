@@ -6,6 +6,7 @@
 #include <Windows.h>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <cmath>
 #include <chrono>
 
@@ -13,7 +14,7 @@ using namespace std;
 using namespace UI;
 using namespace IO;
 
-App::App() : frameCounter(), msec() {}
+App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec() {}
 
 //extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -24,7 +25,7 @@ int App::execute() noexcept
 	try
 	{
 		keyboard = make_unique<Keyboard>();
-		window = make_unique<Window>("DX12 & DXR Tutorial", 900, 600, keyboard.get());
+		window = make_unique<Window>("DX12 & DXR Tutorial", 1350, 900, keyboard.get());
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
 		renderer->init();
 
@@ -64,9 +65,13 @@ void App::processFrame()
 {
 	using namespace std::chrono;
 	milliseconds ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
-	auto msLong = ms.count();
+	const auto msLong = ms.count();
 	long long deltaMs = msec == 0 ? 0 : msLong - msec;
 	msec = msLong;
+
+	// fps stuff
+	fpsMSec = fpsMSec == 0 ? msLong : fpsMSec;
+	// end fps stuff
 
 	renderer->clearBuffer(
 		keyboard->isKeyPressed('R') ? 1.f : 0.f,
@@ -89,8 +94,21 @@ void App::processFrame()
 	renderer->endFrame();
 
 	//// run game code
-
+	
+	if (keyboard->anyKeyPressed()) {
+		frameCounter = 0;
+	}
+	
 	++frameCounter;
+	++fpsFrameCounter;
+
+	if (msLong - fpsMSec >= 1000) {
+		float fps = (float)fpsFrameCounter / (msLong - fpsMSec) * 1000.f;
+		fpsFrameCounter = fpsMSec = 0;
+		ostringstream oss;
+		oss << "DX12 & DXR Tutorial - Total frames: " << frameCounter <<  " FPS: " << fps << endl;
+		window->setWindowName(oss.str());
+	}
 }
 
 float App::getValueIfPressed(char keyPressed, float value) const
