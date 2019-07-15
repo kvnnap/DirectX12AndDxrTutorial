@@ -46,15 +46,15 @@ void rayGen()
 
 	// point on film plane
 	float2 r = pt / dims;
-	float3 objectPlanePosition = float3(
-		cBuffer.camera.objectPlane.width * (r.x - 0.5f), 
-		cBuffer.camera.objectPlane.height * (0.5f - r.y), 
+	float3 filmPlanePosition = float3(
+		cBuffer.camera.filmPlane.width * (r.x - 0.5f), 
+		cBuffer.camera.filmPlane.height * (0.5f - r.y), 
 		0.f);
 
 	// Setup Ray
 	RayDesc ray;
 	ray.Origin = cBuffer.camera.position;
-	ray.Direction = (w * cBuffer.camera.objectPlane.distance + u * objectPlanePosition.x + v * objectPlanePosition.y);
+	ray.Direction = (w * cBuffer.camera.filmPlane.distance + u * filmPlanePosition.x + v * filmPlanePosition.y);
 	ray.TMin = 0.f;
 	ray.TMax = 3.402823e+38;
 

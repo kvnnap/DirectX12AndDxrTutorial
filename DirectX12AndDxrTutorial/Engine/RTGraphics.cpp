@@ -176,10 +176,10 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	shaderCamera.position = camera->getPosition();
 	shaderCamera.direction = camera->getDirection();
 	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
-	shaderCamera.objectPlane.width = 0.0235f;
-	shaderCamera.objectPlane.height = 0.0156f;
-	shaderCamera.objectPlane.distance = 0.018f;
-	shaderCamera.objectPlane.apertureSize = 0.018f / 1.4f;
+	shaderCamera.filmPlane.width = 0.0235f;
+	shaderCamera.filmPlane.height = 0.0156f;
+	shaderCamera.filmPlane.distance = 0.018f;
+	shaderCamera.filmPlane.apertureSize = 0.018f / 1.4f;
 
 	// Setup area lights
 	cBuff.numLights = std::min(std::size(cBuff.areaLights), scene.getLights().size());

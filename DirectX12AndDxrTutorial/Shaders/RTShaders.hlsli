@@ -24,7 +24,7 @@ namespace Shaders {
 		DirectX::XMVECTOR position;
 		DirectX::XMVECTOR direction;
 		DirectX::XMVECTOR up;
-		CameraPlane objectPlane;
+		CameraPlane filmPlane;
 	};
 
 	struct AreaLight {
@@ -66,7 +66,7 @@ struct Camera {
 	float3 position;
 	float3 direction;
 	float3 up;
-	CameraPlane objectPlane;
+	CameraPlane filmPlane;
 };
 
 struct AreaLight {
