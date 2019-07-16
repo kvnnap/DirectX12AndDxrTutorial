@@ -3,6 +3,7 @@
 #include "Exception/Exception.h"
 
 #include "Libraries/tinyobjloader/tiny_obj_loader.h"
+#include "Libraries/stb/stb_image.h"
 
 using namespace std;
 using namespace Engine;
@@ -11,8 +12,12 @@ void Engine::Scene::loadScene(const string& pathToObj)
 {
 	using namespace  tinyobj;
 
+	// may be redundant
 	vertices.clear();
+	faceAttributes.clear();
+	lights.clear();
 	materials.clear();
+	textures.clear();
 
 	attrib_t attr = {};
 	vector<shape_t> shapes;
@@ -20,10 +25,17 @@ void Engine::Scene::loadScene(const string& pathToObj)
 	string warn, err;
 	LoadObj(&attr, &shapes, &materials, &warn, &err, pathToObj.c_str());
 
+	int diffTexId = 0;
 	for (const auto& material : materials) {
+		int currentDiffTexId = material.diffuse_texname.length() ? diffTexId++ : -1;
+		if (currentDiffTexId >= 0) {
+			textures.emplace_back(material.diffuse_texname);
+		}
+
 		this->materials.push_back(Shaders::Material{
 			DirectX::XMFLOAT4(material.diffuse[0], material.diffuse[1], material.diffuse[2], 1.f),
 			DirectX::XMFLOAT4(material.emission[0],material.emission[1],material.emission[2], 0.f),
+			currentDiffTexId
 		});
 	}
 
@@ -126,4 +138,9 @@ const std::vector<Shaders::AreaLight>& Engine::Scene::getLights() const
 const vector<Shaders::Material>& Engine::Scene::getMaterials() const
 {
 	return materials;
+}
+
+const std::vector<Engine::Texture>& Engine::Scene::getTextures() const
+{
+	return textures;
 }

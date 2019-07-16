@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <DirectXMath.h>
+#include "Engine/Texture.h"
 
 #include "../Shaders/RTShaders.hlsli"
 
@@ -26,6 +27,7 @@ namespace Engine {
 		const std::vector<Shaders::FaceAttributes>& getFaceAttributes() const;
 		const std::vector<Shaders::AreaLight>& getLights() const;
 		const std::vector<Shaders::Material>& getMaterials() const;
+		const std::vector<Engine::Texture>& getTextures() const;
 	
 	private:
 
@@ -33,6 +35,8 @@ namespace Engine {
 
 		std::vector<Shaders::FaceAttributes> faceAttributes;
 		std::vector<Shaders::AreaLight> lights;
+		
+		std::vector<Engine::Texture> textures;
 
 		std::vector<Shaders::Material> materials;
 	};

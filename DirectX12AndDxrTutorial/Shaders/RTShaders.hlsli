@@ -7,6 +7,8 @@ namespace Shaders {
 	struct Material {
 		DirectX::XMFLOAT4 diffuse;
 		DirectX::XMFLOAT4 emission;
+		std::int32_t diffuseTextureId;
+		std::uint32_t other[3];
 	};
 
 	struct FaceAttributes {
@@ -48,6 +50,8 @@ namespace Shaders {
 struct Material {
 	float4 diffuse;
 	float4 emission;
+	int diffuseTextureId;
+	int other[3];
 };
 
 struct FaceAttributes {

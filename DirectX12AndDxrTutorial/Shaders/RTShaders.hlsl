@@ -5,6 +5,7 @@ RaytracingAccelerationStructure gRtScene : register(t0);
 StructuredBuffer<float3> verts : register(t1);
 StructuredBuffer<FaceAttributes> faceAttributes : register(t2);
 StructuredBuffer<Material> materials : register(t3);
+Texture2D gTextures[]: register(t4);
 
 // Output texture
 RWTexture2D<float4> gOutput : register(u0);
@@ -90,6 +91,8 @@ void rayGen()
 
 	float3 col = linearToSrgb((float3)gRadiance[launchIndex.xy] / gRadiance[launchIndex.xy].w);
 	gOutput[launchIndex.xy] = float4(col, 1.f);
+	//gOutput[launchIndex.xy] = gTextures[0].Load(uint3(launchIndex.x %512, launchIndex.y%512, 0));
+	//gOutput[launchIndex.xy] = gTextures[launchIndex.xy];
 }
 
 [shader("miss")]

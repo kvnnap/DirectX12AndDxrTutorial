@@ -161,7 +161,9 @@
   <ItemGroup>
     <ClCompile Include="App.cpp" />
     <ClCompile Include="Engine\RTGraphics.cpp" />
+    <ClCompile Include="Engine\Texture.cpp" />
     <ClCompile Include="Engine\UniformSampler.cpp" />
+    <ClCompile Include="Libraries\stb\stb_image.cc" />
     <ClCompile Include="Libraries\tinyobjloader\tiny_obj_loader.cc" />
     <ClCompile Include="Engine\Scene.cpp" />
     <ClCompile Include="Util\DXUtil.cpp" />
@@ -187,7 +189,9 @@
     <ClInclude Include="App.h" />
     <ClInclude Include="Engine\IRenderer.h" />
     <ClInclude Include="Engine\RTGraphics.h" />
+    <ClInclude Include="Engine\Texture.h" />
     <ClInclude Include="Engine\UniformSampler.h" />
+    <ClInclude Include="Libraries\stb\stb_image.h" />
     <ClInclude Include="Libraries\tinyobjloader\tiny_obj_loader.h" />
     <ClInclude Include="Engine\Scene.h" />
     <ClInclude Include="Util\DXUtil.h" />

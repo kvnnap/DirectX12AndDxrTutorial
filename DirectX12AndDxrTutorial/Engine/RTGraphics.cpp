@@ -22,6 +22,7 @@
 #include "../Libraries/imgui/imgui.h"
 #include "../Libraries/imgui/imgui_impl_win32.h"
 #include "../Libraries/imgui/imgui_impl_dx12.h"
+#include "../Libraries/stb/stb_image.h"
 
 #include "../Shaders/RTShaders.hlsli"
 
@@ -90,7 +91,8 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	scene.loadScene("CornellBox-Original.obj");
+	//scene.loadScene("CornellBox-Original.obj");
+	scene.loadScene("sibenik.obj");
 	scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
@@ -131,8 +133,25 @@ void Engine::RTGraphics::init()
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
 	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, tlasTempBuffer, 0.f, false, tlasBuffers);
 
-	pStateObject = createRtPipeline();
+	// load textures
+	vector<wrl::ComPtr<ID3D12Resource>> texTempBuffer;
+	texTempBuffer.resize(scene.getTextures().size());
+	size_t dTCount = 0;
+	for (const auto& texture : scene.getTextures()) {
+		textures.push_back(DXUtil::uploadTextureDataToDefaultHeap(
+			pDevice, 
+			pCurrentCommandList,
+			texTempBuffer[dTCount++],
+			texture.data.get(),
+			texture.width,
+			texture.height,
+			texture.channels,
+			DXGI_FORMAT_R8G8B8A8_UNORM,
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+	}
 
+	pStateObject = createRtPipeline();
+	
 	createShaderResources();
 	createMaterialsAndFaceAttributes();
 
@@ -290,10 +309,15 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Third - Local Root Signature for Ray Gen shader
 	// Build the root signature descriptor and create root signature
-	array<CD3DX12_DESCRIPTOR_RANGE1, 2> descriptorRanges = {
+	vector<CD3DX12_DESCRIPTOR_RANGE1> descriptorRanges = {
 		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE), //gOutput, gRadiance
-		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)  //gRtScene
+		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE) //gRtScene
 	};
+	
+	// Add textures
+	if (!textures.empty()) {
+		descriptorRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 4, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); 
+	}
 	
 	std::vector<CD3DX12_ROOT_PARAMETER1> rayGenRootParams;
 	rayGenRootParams.resize(2);
@@ -383,7 +407,7 @@ void Engine::RTGraphics::createShaderResources()
 	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE, DXGI_FORMAT_R32G32B32A32_FLOAT);
 
 	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
-	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 3, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 3 + textures.size(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
 
 	// Create the UAV descriptor first (needs to be same order as in root signature)
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
@@ -403,6 +427,16 @@ void Engine::RTGraphics::createShaderResources()
 
 	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
+
+	srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+	for (const auto& texture : textures) {
+		cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		pDevice->CreateShaderResourceView(texture.Get(), &srvDesc, cpuDescHandle);
+	}
 }
 
 void Engine::RTGraphics::createMaterialsAndFaceAttributes()

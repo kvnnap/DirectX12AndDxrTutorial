@@ -58,6 +58,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputRTTexture;
 		Microsoft::WRL::ComPtr<ID3D12Resource> radianceTexture;
+		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> textures;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pConstantBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;

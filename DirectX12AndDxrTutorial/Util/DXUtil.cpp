@@ -301,6 +301,28 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::uploadDataToDefaultHeap(wrl::ComPtr<ID
 	return defaultResource;
 }
 
+Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::uploadTextureDataToDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t width, std::size_t height, std::size_t sizePerPixel, DXGI_FORMAT format, D3D12_RESOURCE_STATES finalState)
+{
+	// create texture
+	wrl::ComPtr<ID3D12Resource> texResource = createTextureCommittedResource(device, D3D12_HEAP_TYPE_DEFAULT, width, height, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_FLAG_NONE, format);
+
+	const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texResource.Get(), 0, 1);
+	//const UINT64 uploadBufferSize = width * height * 4;
+
+	// Upload buffer to gpu
+	tempResource = DXUtil::createCommittedResource(device, D3D12_HEAP_TYPE_UPLOAD, uploadBufferSize, D3D12_RESOURCE_STATE_GENERIC_READ);
+	D3D12_SUBRESOURCE_DATA subresourceData = {};
+	subresourceData.pData = ptData;
+	subresourceData.RowPitch = width * sizePerPixel;
+	subresourceData.SlicePitch = subresourceData.RowPitch * height;
+	UpdateSubresources(pCommandList.Get(), texResource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
+
+	// Change state so that it can be read
+	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState));
+
+	return texResource;
+}
+
 void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState)
 {
 	// Transition to correct state
