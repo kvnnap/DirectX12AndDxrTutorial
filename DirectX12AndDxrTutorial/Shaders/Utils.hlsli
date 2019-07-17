@@ -72,6 +72,10 @@ float3 getCentroid(float3 a[3]) {
 	return (a[0] + a[1] + a[2]) / 3.f;
 }
 
+float3 toneMap(float3 c) {
+	return c / (c + 1.f);
+}
+
 float3 linearToSrgb(float3 c)
 {
 	// Based on http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html

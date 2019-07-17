@@ -92,7 +92,8 @@ void rayGen()
 
 	gRadiance[launchIndex.xy] += float4(radiance, iterCount);
 
-	const float3 col = linearToSrgb((float3)gRadiance[launchIndex.xy] / gRadiance[launchIndex.xy].w);
+	const float3 rad = (float3)gRadiance[launchIndex.xy] / gRadiance[launchIndex.xy].w;
+	const float3 col = linearToSrgb(toneMap(rad));
 	gOutput[launchIndex.xy] = float4(col, 1.f);
 }
 
