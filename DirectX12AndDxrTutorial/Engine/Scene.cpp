@@ -77,7 +77,8 @@ void Engine::Scene::loadScene(const string& pathToObj)
 				}
 				else {
 					size_t texLocation = 2 * static_cast<size_t>(texIndex);
-					DirectX::XMFLOAT2 texVertex = DirectX::XMFLOAT2(attr.texcoords[texLocation], attr.texcoords[texLocation + 1]);
+					// invert texture vertically as is commonly done in OBJ
+					DirectX::XMFLOAT2 texVertex = DirectX::XMFLOAT2(attr.texcoords[texLocation], 1.f - attr.texcoords[texLocation + 1]);
 					texVertices.push_back(texVertex);
 				}
 				

@@ -161,8 +161,7 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	float2 a0 = texVerts.Load(index);
 	float2 a1 = texVerts.Load(index + 1);
 	float2 a2 = texVerts.Load(index + 2);
-	float2 pTex = a0 + (a1 - a0) * bary.x + (a2 - a0) * bary.y;
-	pTex.y = -pTex.y;
+	float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
 	float3 diffuse = materials[materialId].diffuseTextureId == -1 ? 
 		(float3)materials[materialId].diffuse : 
 		(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
@@ -210,8 +209,7 @@ float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 		float2 a0 = texVerts.Load(prevIndex);
 		float2 a1 = texVerts.Load(prevIndex + 1);
 		float2 a2 = texVerts.Load(prevIndex + 2);
-		float2 pTex = a0 + (a1 - a0) * bary.x + (a2 - a0) * bary.y;
-		pTex.y = -pTex.y;
+		float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
 		float3 diffuse = materials[materialId].diffuseTextureId == -1 ?
 			(float3)materials[materialId].diffuse :
 			(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
