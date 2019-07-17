@@ -150,6 +150,16 @@ void Engine::RTGraphics::init()
 			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 	}
 
+	// load texture coordinates
+	wrl::ComPtr<ID3D12Resource> texCoordsTempBuffer;
+	pTexCoords = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		texCoordsTempBuffer,
+		scene.getTextureVertices().data(),
+		scene.getTextureVertices().size() * sizeof(dx::XMFLOAT2),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
 	pStateObject = createRtPipeline();
 	
 	createShaderResources();
@@ -316,7 +326,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	
 	// Add textures
 	if (!textures.empty()) {
-		descriptorRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 4, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); 
+		descriptorRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 5, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); 
 	}
 	
 	std::vector<CD3DX12_ROOT_PARAMETER1> rayGenRootParams;
@@ -350,15 +360,29 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	emptyAssociation.AddExport(L"IndirectHitGroup");
 	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
 
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+	sampler.MinLOD = 0.0f;
+	sampler.MaxLOD = D3D12_FLOAT32_MAX;
+	sampler.ShaderRegister = 0;
+	sampler.RegisterSpace = 0;
+	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
 	// Create root signature having constant buffer and SRV
 	std::vector<CD3DX12_ROOT_PARAMETER1> chsRootParams;
-	chsRootParams.resize(5);
+	chsRootParams.resize(6);
 	chsRootParams[0].InitAsConstantBufferView(0);
 	chsRootParams[1].InitAsShaderResourceView(1);
 	chsRootParams[2] = rayGenRootParams[0];
 	chsRootParams[3].InitAsShaderResourceView(2);
 	chsRootParams[4].InitAsShaderResourceView(3);
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+	chsRootParams[5].InitAsShaderResourceView(4);
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 	wrl::ComPtr<ID3D12RootSignature> cbvRootSignature = DXUtil::createRootSignature(pDevice, cbvRootSignatureDesc);
 	// Set the local root signature sub object
 	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT cbvLocalRootSignatureSubObject(stateObjectDesc);
@@ -371,7 +395,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
-	shaderConfig.Config(3 * sizeof(float), 2 * sizeof(float));
+	shaderConfig.Config(4 * sizeof(float), 2 * sizeof(float));
 
 	// Eighth - Associate the shader configuration with all shader programs
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT shaderConfigAssociation(stateObjectDesc);
@@ -521,11 +545,16 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 		// Face attributes
 		handle = pFaceAttributes->GetGPUVirtualAddress() + faceAttributeIndex * sizeof(Shaders::FaceAttributes);
 		memcpy(address += 8, &handle, sizeof(handle));
-		faceAttributeIndex += scene.getVertices(i).size() / 3;
 
 		// Material
 		handle = pMaterials->GetGPUVirtualAddress();
 		memcpy(address += 8, &handle, sizeof(handle));
+
+		// Tex Coords - 3 float2 per face
+		handle = pTexCoords->GetGPUVirtualAddress() + faceAttributeIndex * 3 * sizeof(dx::XMFLOAT2);
+		memcpy(address += 8, &handle, sizeof(handle));
+
+		faceAttributeIndex += scene.getVertices(i).size() / 3;
 
 		// SHADOW
 		++index;

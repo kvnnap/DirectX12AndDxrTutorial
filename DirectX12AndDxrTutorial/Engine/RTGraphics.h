@@ -61,6 +61,7 @@ namespace Engine {
 		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> textures;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pConstantBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pTexCoords;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> globalEmptyRootSignature;

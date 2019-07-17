@@ -23,6 +23,7 @@ namespace Engine {
 		void flattenGroups();
 
 		const std::vector<std::vector<DirectX::XMFLOAT3>>& getVertices() const;
+		const std::vector<DirectX::XMFLOAT2>& getTextureVertices() const;
 		const std::vector<DirectX::XMFLOAT3>& getVertices(size_t materialId) const;
 		const std::vector<Shaders::FaceAttributes>& getFaceAttributes() const;
 		const std::vector<Shaders::AreaLight>& getLights() const;
@@ -32,6 +33,7 @@ namespace Engine {
 	private:
 
 		std::vector<std::vector<DirectX::XMFLOAT3>> vertices;
+		std::vector<DirectX::XMFLOAT2> texVertices;
 
 		std::vector<Shaders::FaceAttributes> faceAttributes;
 		std::vector<Shaders::AreaLight> lights;

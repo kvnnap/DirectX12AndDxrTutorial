@@ -14,6 +14,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 
 	// may be redundant
 	vertices.clear();
+	texVertices.clear();
 	faceAttributes.clear();
 	lights.clear();
 	materials.clear();
@@ -70,6 +71,17 @@ void Engine::Scene::loadScene(const string& pathToObj)
 
 				vertices[shapeNum].push_back(vertex);
 
+				int texIndex = shape.mesh.indices[index + v].texcoord_index;
+				if (texIndex == -1) {
+					texVertices.emplace_back(0.f, 0.f);
+				}
+				else {
+					size_t texLocation = 2 * static_cast<size_t>(texIndex);
+					DirectX::XMFLOAT2 texVertex = DirectX::XMFLOAT2(attr.texcoords[texLocation], attr.texcoords[texLocation + 1]);
+					texVertices.push_back(texVertex);
+				}
+				
+
 				if (isEmissive) {
 					areaLight.a[v] = DirectX::XMVectorSet(vertex.x, vertex.y, vertex.z, 1.f);
 				}
@@ -118,6 +130,11 @@ void Engine::Scene::flattenGroups()
 const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() const
 {
 	return vertices;
+}
+
+const std::vector<DirectX::XMFLOAT2>& Engine::Scene::getTextureVertices() const
+{
+	return texVertices;
 }
 
 const std::vector<DirectX::XMFLOAT3>& Engine::Scene::getVertices(size_t materialId) const
