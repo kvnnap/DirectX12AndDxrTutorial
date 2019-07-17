@@ -103,6 +103,17 @@ void miss(inout RayPayload payload)
 	payload.color = float3(0.f, 0.f, 0.f);
 }
 
+float3 getDiffuseValue(uint primitiveId, uint materialId, float2 bary) {
+	const uint index = primitiveId * 3;
+	float2 a0 = texVerts.Load(index);
+	float2 a1 = texVerts.Load(index + 1);
+	float2 a2 = texVerts.Load(index + 2);
+	float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
+	return materials[materialId].diffuseTextureId == -1 ?
+		(float3)materials[materialId].diffuse :
+		(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
+}
+
 float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, float3 unitNormal, uint materialId, float2 bary) {
 	float3 radiance = float3(0.f, 0.f, 0.f);
 	float lightPdf = 1.f / cBuffer.numLights;
@@ -157,14 +168,7 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	float projectedArea = getTriangleArea((float3[3]) areaLight.a) * lightShadowDot / (lightDistance * lightDistance);
 
 	// Get diffuse of intersected material
-	const uint index = primitiveId * 3;
-	float2 a0 = texVerts.Load(index);
-	float2 a1 = texVerts.Load(index + 1);
-	float2 a2 = texVerts.Load(index + 2);
-	float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
-	float3 diffuse = materials[materialId].diffuseTextureId == -1 ? 
-		(float3)materials[materialId].diffuse : 
-		(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
+	float3 diffuse = getDiffuseValue(primitiveId, materialId, bary);
 
 	radiance = lightRadiance * diffuse;
 	radiance *= primitiveShadowDot * projectedArea  / (PI * lightPdf);
@@ -205,14 +209,7 @@ float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 		if (payload.tHit == -1.f) { break; }
 
 		// Get diffuse of prev intersected material
-		const uint prevIndex = primitiveId * 3;
-		float2 a0 = texVerts.Load(prevIndex);
-		float2 a1 = texVerts.Load(prevIndex + 1);
-		float2 a2 = texVerts.Load(prevIndex + 2);
-		float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
-		float3 diffuse = materials[materialId].diffuseTextureId == -1 ?
-			(float3)materials[materialId].diffuse :
-			(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
+		float3 diffuse = getDiffuseValue(primitiveId, materialId, bary);
 
 		// Compute coefficients for this iteration
 		localCoefficients *= diffuse / probabilityOfContinuing;
