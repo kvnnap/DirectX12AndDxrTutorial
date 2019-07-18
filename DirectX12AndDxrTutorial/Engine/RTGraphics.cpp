@@ -91,8 +91,8 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	//scene.loadScene("CornellBox-Original.obj");
-	scene.loadScene("sibenik.obj");
+	scene.loadScene("CornellBox-Original.obj");
+	//scene.loadScene("sibenik.obj");
 	scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
@@ -148,6 +148,11 @@ void Engine::RTGraphics::init()
 			texture.channels,
 			DXGI_FORMAT_R8G8B8A8_UNORM,
 			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+	}
+
+	if (textures.empty()) {
+		textures.push_back(DXUtil::createTextureCommittedResource(
+			pDevice, D3D12_HEAP_TYPE_DEFAULT, 1, 1, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_FLAG_NONE, DXGI_FORMAT_R8G8B8A8_UNORM));
 	}
 
 	// load texture coordinates

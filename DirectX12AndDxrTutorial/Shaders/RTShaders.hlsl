@@ -104,14 +104,16 @@ void miss(inout RayPayload payload)
 }
 
 float3 getDiffuseValue(uint primitiveId, uint materialId, float2 bary) {
+	if (materials[materialId].diffuseTextureId == -1) {
+		return (float3)materials[materialId].diffuse;
+	}
+
 	const uint index = primitiveId * 3;
 	float2 a0 = texVerts.Load(index);
 	float2 a1 = texVerts.Load(index + 1);
 	float2 a2 = texVerts.Load(index + 2);
 	float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
-	return materials[materialId].diffuseTextureId == -1 ?
-		(float3)materials[materialId].diffuse :
-		(float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
+	return (float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
 }
 
 float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, float3 unitNormal, uint materialId, float2 bary) {
