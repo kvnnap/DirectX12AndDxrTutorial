@@ -57,7 +57,7 @@ bool Util::DXUtil::checkTearingSupport()
 	BOOL allowTearing = false;
 	UINT createFactoryFlags = 0;
 
-	wrl::ComPtr<IDXGIFactory7> dxgiFactory = createDXGIFactory();
+	auto dxgiFactory = createDXGIFactory();
 
 	HRESULT hr;
 
@@ -98,7 +98,7 @@ wrl::ComPtr<IDXGIAdapter4> Util::DXUtil::getAdapterLatestFeatureLevel(D3D_FEATUR
 
 wrl::ComPtr<IDXGIAdapter4> Util::DXUtil::getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp)
 {
-	wrl::ComPtr<IDXGIFactory7> dxgiFactory = createDXGIFactory();
+	auto dxgiFactory = createDXGIFactory();
 
 	wrl::ComPtr<IDXGIAdapter1> dxgiAdapter1;
 	wrl::ComPtr<IDXGIAdapter4> dxgiAdapter4;
