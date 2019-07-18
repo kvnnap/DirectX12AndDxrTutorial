@@ -22,7 +22,7 @@ namespace Util
 		static Microsoft::WRL::ComPtr<IDXGIAdapter4> getAdapter(D3D_FEATURE_LEVEL featureLevel, bool useWarp = false);
 		static Microsoft::WRL::ComPtr<ID3D12Device5> createDeviceFromAdapter(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel);
 		static Microsoft::WRL::ComPtr<IDXGIFactory7> createDXGIFactory();
-		static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, UINT numDescriptors);
+		static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible = false);
 		static Microsoft::WRL::ComPtr<IDXGISwapChain4> createSwapChain(Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue, HWND hWnd, UINT numBuffers);
 
 		static std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> createRenderTargetViews(
@@ -46,9 +46,6 @@ namespace Util
 		static void updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList, Microsoft::WRL::ComPtr<ID3D12Resource>& resource, Microsoft::WRL::ComPtr<ID3D12Resource>& tempResource, const void* ptData, std::size_t dataSize, D3D12_RESOURCE_STATES previousState, D3D12_RESOURCE_STATES finalState);
 
 		static Microsoft::WRL::ComPtr<ID3D12RootSignature> createRootSignature(Microsoft::WRL::ComPtr<ID3D12Device5> device, const D3D12_VERSIONED_ROOT_SIGNATURE_DESC& rootSignatureDesc);
-
-		// Maybe RT only?
-		static Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> createDescriptorHeap(Microsoft::WRL::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible);
 
 		// RT Stuff
 		static Microsoft::WRL::ComPtr<ID3D12Device5> createRTDeviceFromAdapter(Microsoft::WRL::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel);

@@ -146,16 +146,17 @@ wrl::ComPtr<IDXGIFactory7> Util::DXUtil::createDXGIFactory()
 	return dxgiFactory;
 }
 
-wrl::ComPtr<ID3D12DescriptorHeap> Util::DXUtil::createDescriptorHeap(wrl::ComPtr<ID3D12Device5> pDevice, D3D12_DESCRIPTOR_HEAP_TYPE descriptorHeapType, UINT numDescriptors)
+wrl::ComPtr<ID3D12DescriptorHeap> Util::DXUtil::createDescriptorHeap(wrl::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible)
 {
-	wrl::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
-	D3D12_DESCRIPTOR_HEAP_DESC dhd = {};
-	dhd.Type = descriptorHeapType;
-	dhd.NumDescriptors = numDescriptors;
-	dhd.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
 	HRESULT hr;
-	GFXTHROWIFFAILED(pDevice->CreateDescriptorHeap(&dhd, IID_PPV_ARGS(&descriptorHeap)));
+	wrl::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
+
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.NumDescriptors = count;
+	desc.Type = type;
+	desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+	GFXTHROWIFFAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
 
 	return descriptorHeap;
 }
@@ -366,21 +367,6 @@ wrl::ComPtr<ID3D12RootSignature> Util::DXUtil::createRootSignature(wrl::ComPtr<I
 	GFXTHROWIFFAILED(pDevice->CreateRootSignature(0, rootSignatureBlob->GetBufferPointer(), rootSignatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
 
 	return rootSignature;
-}
-
-wrl::ComPtr<ID3D12DescriptorHeap> Util::DXUtil::createDescriptorHeap(wrl::ComPtr<ID3D12Device5> device, UINT count, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible)
-{
-	HRESULT hr;
-	wrl::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
-
-	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
-	desc.NumDescriptors = count;
-	desc.Type = type;
-	desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-
-	GFXTHROWIFFAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&descriptorHeap)));
-
-	return descriptorHeap;
 }
 
 wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<IDXGIAdapter4> adapter, D3D_FEATURE_LEVEL featureLevel)

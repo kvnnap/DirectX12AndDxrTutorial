@@ -55,22 +55,22 @@ Graphics::Graphics(HWND hWnd)
 	pCommandQueue = make_unique<CommandQueue>(pDevice, D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 	// Create swap chain
-	pSwap = DXUtil::createSwapChain(pCommandQueue->getCommandQueue(), hWnd, std::size(pBackBuffers));
+	pSwap = DXUtil::createSwapChain(pCommandQueue->getCommandQueue(), hWnd, numBackBuffers);
 
 	// Create descriptor heap for render target view
-	pDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, std::size(pBackBuffers));
+	pDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, numBackBuffers, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 	// Create render target Views
 	pRTVDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	auto backBuffers = DXUtil::createRenderTargetViews(pDevice, pDescriptorHeap, pSwap, std::size(pBackBuffers));
+	auto backBuffers = DXUtil::createRenderTargetViews(pDevice, pDescriptorHeap, pSwap, numBackBuffers);
 	for (int i = 0; i < backBuffers.size(); ++i) {
 		pBackBuffers[i] = backBuffers[i];
 	}
 
 	// And for depth stencil view
-	pDepthDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, std::size(pDepthBuffers));
+	pDepthDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, numBackBuffers, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	pDSVDescriptorSize = pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-	auto depthBuffers = DXUtil::createDepthStencilView(pDevice, pDepthDescriptorHeap, winWidth, winHeight, std::size(pDepthBuffers));
+	auto depthBuffers = DXUtil::createDepthStencilView(pDevice, pDepthDescriptorHeap, winWidth, winHeight, numBackBuffers);
 	for (int i = 0; i < backBuffers.size(); ++i) {
 		pDepthBuffers[i] = depthBuffers[i];
 	}
@@ -88,24 +88,24 @@ Graphics::Graphics(HWND hWnd)
 		10.f);
 
 	// Setup ImGui - TODO DX12
-	/*bool valid = IMGUI_CHECKVERSION();
-	pImGuiDescriptorHeap = createDescriptorHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, std::size(pBackBuffers));
+	bool valid = IMGUI_CHECKVERSION();
+	pImGuiDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 1u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
 	ImGuiContext * context = ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui_ImplWin32_Init(hWnd);
 	ImGui_ImplDX12_Init(
 		pDevice.Get(), 
-		std::size(pBackBuffers), 
+		numBackBuffers,
 		DXGI_FORMAT_R8G8B8A8_UNORM, 
 		pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	ImGui::StyleColorsDark();*/
+	ImGui::StyleColorsDark();
 }
 
 Graphics::~Graphics() {
-	/*ImGui_ImplDX12_Shutdown();
+	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();*/
+	ImGui::DestroyContext();
 
 	// Ensure that all GPU stuff is finished before releasing resources
 	pCommandQueue->flush();
@@ -252,6 +252,8 @@ void Engine::Graphics::init()
 
 void Graphics::draw(uint64_t timeMs, bool clear)
 {
+	pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
+
 	pCurrentCommandList->SetPipelineState(pipelineState.Get());
 	pCurrentCommandList->SetGraphicsRootSignature(rootSignature.Get());
 
@@ -272,23 +274,23 @@ void Graphics::draw(uint64_t timeMs, bool clear)
 
 	pCurrentCommandList->DrawInstanced(3u, 1u, 0u, 0u);
 	// Start the Dear ImGui frame
-	//ImGui_ImplDX12_NewFrame();
-	//ImGui_ImplWin32_NewFrame();
-	//ImGui::NewFrame();
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
 
 	//// Create ImGui Window
-	//ImGui::Begin("Drawables");
+	ImGui::Begin("Drawables");
 
+	ImGui::End();
+
+	// Create ImGui Test Window
+	//ImGui::Begin("Test");
+	//ImGui::Text("Hello, world %d", 123);
 	//ImGui::End();
 
-	//// Create ImGui Test Window
-	////ImGui::Begin("Test");
-	////ImGui::Text("Hello, world %d", 123);
-	////ImGui::End();
-
-	//// Assemble together draw data
-	//ImGui::Render();
-	////ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
+	// Assemble together draw data
+	ImGui::Render();
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
 }
 
 void Graphics::endFrame()

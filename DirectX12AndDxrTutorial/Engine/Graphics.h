@@ -42,6 +42,8 @@ namespace Engine {
 
 	private:
 
+		static const UINT numBackBuffers = 2;
+
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
 
@@ -57,7 +59,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
 
 		// Tracks the backbuffers used in the swapchain
-		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[2];
+		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
 
 		BOOL tearingSupported;
 
@@ -67,7 +69,7 @@ namespace Engine {
 		uint64_t frameFenceValues[2];
 
 		// Depth buffer
-		Microsoft::WRL::ComPtr<ID3D12Resource> pDepthBuffers[2];
+		Microsoft::WRL::ComPtr<ID3D12Resource> pDepthBuffers[numBackBuffers];
 
 		// Temporary triangle stuff here
 		D3D12_VERTEX_BUFFER_VIEW vertexBufferView;

@@ -16,7 +16,7 @@ using namespace IO;
 
 App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec() {}
 
-//extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int App::execute() noexcept
 {
@@ -29,7 +29,7 @@ int App::execute() noexcept
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
 		renderer->init();
 
-		//window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
+		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 
 		return localExecute();
 	}
