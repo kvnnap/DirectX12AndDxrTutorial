@@ -71,6 +71,8 @@ namespace Engine {
 		// Heaps are similar to views in DirectX11 - essentially a list of views?
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pRTVDescriptorHeap;
 
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
+
 		// Tracks the backbuffers used in the swapchain
 		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
 

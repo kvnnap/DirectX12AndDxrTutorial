@@ -80,10 +80,28 @@ RTGraphics::RTGraphics(HWND hWnd)
 		1.0f,
 		1.f,
 		10.f);
+
+	// Setup ImGui
+	bool valid = IMGUI_CHECKVERSION();
+	pImGuiDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 1u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+	ImGuiContext* context = ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui_ImplWin32_Init(hWnd);
+	ImGui_ImplDX12_Init(
+		pDevice.Get(),
+		numBackBuffers,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+		pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	ImGui::StyleColorsDark();
 }
 
 Engine::RTGraphics::~RTGraphics()
 {
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+
 	pCommandQueue->flush();
 }
 
@@ -261,6 +279,24 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	dispatchRaysDesc.HitGroupTable.SizeInBytes = dispatchRaysDesc.HitGroupTable.StrideInBytes * scene.getVertices().size() * 3;
 
 	pCurrentCommandList->DispatchRays(&dispatchRaysDesc);
+
+	// Start the Dear ImGui frame
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	//// Create ImGui Window
+	ImGui::Begin("Drawables");
+
+	ImGui::End();
+
+	// Create ImGui Test Window
+	//ImGui::Begin("Test");
+	//ImGui::Text("Hello, world %d", 123);
+	//ImGui::End();
+
+	// Assemble together draw data
+	ImGui::Render();
 }
 
 void Engine::RTGraphics::endFrame()
@@ -271,8 +307,16 @@ void Engine::RTGraphics::endFrame()
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
 	// perform copy
 	pCurrentCommandList->CopyResource(backBuffer.Get(), outputRTTexture.Get());
-	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET));
 
+	// Draw imgui
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
+	pCurrentCommandList->OMSetRenderTargets(1u, &rtvDescriptorHandle, FALSE, nullptr);
+
+	pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
+
+	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 	// Execute command list
 	frameFenceValues[pCurrentBackBufferIndex] = pCommandQueue->executeCommandList(pCurrentCommandList);
 
