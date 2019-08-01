@@ -53,7 +53,7 @@ namespace Engine {
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList,
 			Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject,
-			Microsoft::WRL::ComPtr<ID3D12Resource> shadingTableTempResource);
+			Microsoft::WRL::ComPtr<ID3D12Resource>& shadingTableTempResource);
 
 		void addProgramAssociationsToSubobject(CD3DX12_STATE_OBJECT_DESC& stateObjectDesc);
 

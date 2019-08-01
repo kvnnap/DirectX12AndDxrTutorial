@@ -260,26 +260,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	pCurrentCommandList->SetPipelineState1(pStateObject.Get());
 
 	// Launch rays
-	D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = {};
-
-	// Dimensions of the compute grid
-	dispatchRaysDesc.Width = winWidth;
-	dispatchRaysDesc.Height = winHeight;
-	dispatchRaysDesc.Depth = 1;
-
-	// Ray generation shader record
-	dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = pShadingTable->GetGPUVirtualAddress();
-	dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes = 64;
-
-	// Miss ray record
-	dispatchRaysDesc.MissShaderTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 64;
-	dispatchRaysDesc.MissShaderTable.StrideInBytes = 64;
-	dispatchRaysDesc.MissShaderTable.SizeInBytes = dispatchRaysDesc.MissShaderTable.StrideInBytes * 2;
-
-	// Hit ray record
-	dispatchRaysDesc.HitGroupTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + 192;
-	dispatchRaysDesc.HitGroupTable.StrideInBytes = D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT * 3;
-	dispatchRaysDesc.HitGroupTable.SizeInBytes = dispatchRaysDesc.HitGroupTable.StrideInBytes * scene.getVertices().size() * 3;
+	D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = shadingTable->getDispatchRaysDescriptor(winWidth, winHeight);
 
 	pCurrentCommandList->DispatchRays(&dispatchRaysDesc);
 
@@ -379,7 +360,6 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 		rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 5, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));
 	}
 
-	const auto& ranges = rootSignatureManager->getDescriptorRanges("BVHAndTextures");
 	rootSignatureManager->setDescriptorTableParameter("BVHAndTexturesDescTable", "BVHAndTextures");
 
 	CD3DX12_ROOT_PARAMETER1 param;
@@ -399,8 +379,6 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	// Sixth - Associate the empty local root signature with the miss programs
 	shadingTable->addProgram(L"miss", Miss, "EmptyRootSignature");
 	shadingTable->addProgram(L"indirectMiss", Miss, "EmptyRootSignature");
-	shadingTable->addProgram(L"ShadowHitGroup", HitGroup, "EmptyRootSignature");
-	shadingTable->addProgram(L"IndirectHitGroup", HitGroup, "EmptyRootSignature");
 
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
@@ -427,6 +405,8 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Associate cbv signature with hit program
 	shadingTable->addProgram(L"HitGroup", HitGroup, "HitRootSignature");
+	shadingTable->addProgram(L"ShadowHitGroup", HitGroup, "EmptyRootSignature");
+	shadingTable->addProgram(L"IndirectHitGroup", HitGroup, "EmptyRootSignature");
 
 	// Generate/add subobjects
 	rootSignatureManager->addRootSignaturesToSubObject(stateObjectDesc);
@@ -463,15 +443,16 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	return stateObject;
 }
 
+// TODO: Automate where possible
 void Engine::RTGraphics::createShaderResources()
 {
+	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
+	srvDescriptorHeap = rootSignatureManager->generateDescriptorHeapForRangeParameter("BVHAndTexturesDescTable", pDevice);
+
 	// The output resource
 	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
 	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE, DXGI_FORMAT_R32G32B32A32_FLOAT);
-
-	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
-	srvDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 3 + textures.size(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
-
+	
 	// Create the UAV descriptor first (needs to be same order as in root signature)
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; // In below, set it at the first location of this heap
@@ -528,83 +509,16 @@ void Engine::RTGraphics::createMaterialsAndFaceAttributes()
 
 wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
 {
-	// Extract the properties interface
-	wrl::ComPtr<ID3D12StateObjectProperties> pStateObjectProps;
-	pStateObject.As(&pStateObjectProps);
+	// Link elements
+	shadingTable->setInputForDescriptorTableParameter(L"rayGen", "BVHAndTexturesDescTable", srvDescriptorHeap);
+	shadingTable->setInputForViewParameter(L"rayGen", "ConstBuff", pConstantBuffer);
 
-	// Table layout is ProgramID + constants/descriptors/descriptor-tables
-	// Calculate size for shading table
-	UINT64 hitGroupTableSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8 + 8 + 8 + 8 + 8;
-	auto t = numeric_limits<size_t>::max();
-	std::align(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, hitGroupTableSize, (void*&)hitGroupTableSize, t); // align using largest record size (rayGen)
-	const UINT64 hitGroupTableRecordSize = hitGroupTableSize;
-	const size_t hitGroupRecords = scene.getVertices().size();
-	hitGroupTableSize *= hitGroupRecords * 3; // n hit group records
-	const size_t genMissSize = 192; // 3 Records(rayGen / miss / indirectmiss)
-	const size_t totalTableSize = genMissSize + hitGroupTableSize;
+	shadingTable->setInputForViewParameter(L"HitGroup", "ConstBuff", pConstantBuffer);
+	shadingTable->setInputForViewParameter(L"HitGroup", "verts", vertexBuffers[0]);
+	shadingTable->setInputForDescriptorTableParameter(L"HitGroup", "BVHAndTexturesDescTable", srvDescriptorHeap);
+	shadingTable->setInputForViewParameter(L"HitGroup", "faceAttributes", pFaceAttributes);
+	shadingTable->setInputForViewParameter(L"HitGroup", "materials", pMaterials);
+	shadingTable->setInputForViewParameter(L"HitGroup", "texVerts", pTexCoords);
 
-	// Create host side buffer - it should be zero initialised when using make_unique..
-	unique_ptr<uint8_t[]> bufferManager = make_unique<uint8_t[]>(totalTableSize);
-	uint8_t* buffer = bufferManager.get();
-
-	// Entry 0,1 - Program Id's
-	size_t i = 0;
-	for (const auto& program : { L"rayGen", L"miss", L"indirectMiss" }) {
-		memcpy(buffer + i++ * 64, pStateObjectProps->GetShaderIdentifier(program), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-	}
-
-	// Fill in Entry 0 Descriptor table entry
-	UINT64 descriptorTableHandle = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
-	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &descriptorTableHandle, sizeof(descriptorTableHandle));
-
-	auto cbHandle = pConstantBuffer->GetGPUVirtualAddress();
-	memcpy(buffer + D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + 8, &cbHandle, sizeof(cbHandle));
-
-	size_t faceAttributeIndex = 0;
-
-	for (i = 0; i < hitGroupRecords; ++i) {
-
-		size_t index = i * 3;
-
-		uint8_t* address = buffer + genMissSize + index * hitGroupTableRecordSize;
-
-		memcpy(address, pStateObjectProps->GetShaderIdentifier(L"HitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-		// Fill in Entry 2 - CBV entry
-		auto handle = pConstantBuffer->GetGPUVirtualAddress();
-		memcpy(address += D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, &handle, sizeof(handle));
-
-		// Vertices ptr
-		handle = vertexBuffers[i]->GetGPUVirtualAddress();
-		memcpy(address += 8, &handle, sizeof(handle));
-
-		// descriptor table pointer
-		memcpy(address += 8, &descriptorTableHandle, sizeof(descriptorTableHandle));
-
-		// Face attributes
-		handle = pFaceAttributes->GetGPUVirtualAddress() + faceAttributeIndex * sizeof(Shaders::FaceAttributes);
-		memcpy(address += 8, &handle, sizeof(handle));
-
-		// Material
-		handle = pMaterials->GetGPUVirtualAddress();
-		memcpy(address += 8, &handle, sizeof(handle));
-
-		// Tex Coords - 3 float2 per face
-		handle = pTexCoords->GetGPUVirtualAddress() + faceAttributeIndex * 3 * sizeof(dx::XMFLOAT2);
-		memcpy(address += 8, &handle, sizeof(handle));
-
-		faceAttributeIndex += scene.getVertices(i).size() / 3;
-
-		// SHADOW
-		++index;
-		memcpy(buffer + genMissSize + index * hitGroupTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"ShadowHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-		// Indirect
-		++index;
-		memcpy(buffer + genMissSize + index * hitGroupTableRecordSize, pStateObjectProps->GetShaderIdentifier(L"IndirectHitGroup"), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-	}
-
-	// Upload buffer to gpu
-	return DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shaderTableTempResource, buffer, totalTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	return shadingTable->generateShadingTable(pDevice, pCurrentCommandList, pStateObject, shaderTableTempResource);
 }
-

@@ -21,7 +21,7 @@ void Engine::ShadingTable::addProgram(const wstring& programName, ShadingRecordT
 void Engine::ShadingTable::setInputForDescriptorTableParameter(const wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap)
 {
 	// Get Program data
-	auto& programStruct = shadingRecords[shadingRecordsMap[programName]];
+	auto& programStruct = shadingRecords[shadingRecordsMap.at(programName)];
 
 	// Check if correct type
 	const auto& parameter = rootSignatureManager->getParameterForRootSignature(programStruct.rootSignatureName, parameterName);
@@ -35,7 +35,7 @@ void Engine::ShadingTable::setInputForDescriptorTableParameter(const wstring& pr
 void Engine::ShadingTable::setInputForViewParameter(const wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12Resource> resource)
 {
 	// Get Program data
-	auto& programStruct = shadingRecords[shadingRecordsMap[programName]];
+	auto& programStruct = shadingRecords[shadingRecordsMap.at(programName)];
 
 	// Check if correct type
 	const auto& parameter = rootSignatureManager->getParameterForRootSignature(programStruct.rootSignatureName, parameterName);
@@ -49,7 +49,7 @@ void Engine::ShadingTable::setInputForViewParameter(const wstring& programName, 
 void Engine::ShadingTable::setInputForConstantParameter(const wstring& programName, const std::string& parameterName, UINT32 constant)
 {
 	// Get Program data
-	auto& programStruct = shadingRecords[shadingRecordsMap[programName]];
+	auto& programStruct = shadingRecords[shadingRecordsMap.at(programName)];
 
 	// Check if correct type
 	const auto& parameter = rootSignatureManager->getParameterForRootSignature(programStruct.rootSignatureName, parameterName);
@@ -64,7 +64,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Engine::ShadingTable::generateShadingTabl
 	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList,
 	Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject,
-	Microsoft::WRL::ComPtr<ID3D12Resource> shadingTableTempResource)
+	Microsoft::WRL::ComPtr<ID3D12Resource>& shadingTableTempResource)
 {
 	validateInputs();
 	sortShadingRecords();
@@ -157,11 +157,13 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Engine::ShadingTable::generateShadingTabl
 		}
 
 		// Calculate next record location
-		localBuffer = buffer + tableLayout[shadingRecord.shadingRecordType].alignedRecordSize * ++localRecordNumber;
+		localBuffer = buffer + 
+			tableLayout[shadingRecord.shadingRecordType].offsetInBytes + 
+			tableLayout[shadingRecord.shadingRecordType].alignedRecordSize * ++localRecordNumber;
 	}
 
 	// Upload buffer to gpu
-	return DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shadingTableTempResource, buffer, totalTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	return pShadingTable = DXUtil::uploadDataToDefaultHeap(pDevice, pCurrentCommandList, shadingTableTempResource, buffer, totalTableSize, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
 void Engine::ShadingTable::addProgramAssociationsToSubobject(CD3DX12_STATE_OBJECT_DESC& stateObjectDesc)
@@ -189,6 +191,32 @@ void Engine::ShadingTable::addProgramAssociationsToSubobject(CD3DX12_STATE_OBJEC
 	}
 }
 
+D3D12_DISPATCH_RAYS_DESC Engine::ShadingTable::getDispatchRaysDescriptor(UINT32 width, UINT32 height) const
+{
+	D3D12_DISPATCH_RAYS_DESC dispatchRaysDesc = {};
+
+	// Dimensions of the compute grid
+	dispatchRaysDesc.Width = width;
+	dispatchRaysDesc.Height = height;
+	dispatchRaysDesc.Depth = 1;
+
+	// Ray generation shader record
+	dispatchRaysDesc.RayGenerationShaderRecord.StartAddress = pShadingTable->GetGPUVirtualAddress() + tableLayout[0].offsetInBytes;
+	dispatchRaysDesc.RayGenerationShaderRecord.SizeInBytes = tableLayout[0].numOfRecords * tableLayout[0].alignedRecordSize;
+
+	// Miss ray record
+	dispatchRaysDesc.MissShaderTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + tableLayout[1].offsetInBytes;
+	dispatchRaysDesc.MissShaderTable.StrideInBytes = tableLayout[1].alignedRecordSize;
+	dispatchRaysDesc.MissShaderTable.SizeInBytes = dispatchRaysDesc.MissShaderTable.StrideInBytes * tableLayout[1].numOfRecords;
+
+	// Hit ray record
+	dispatchRaysDesc.HitGroupTable.StartAddress = pShadingTable->GetGPUVirtualAddress() + tableLayout[2].offsetInBytes;;
+	dispatchRaysDesc.HitGroupTable.StrideInBytes = tableLayout[2].alignedRecordSize;
+	dispatchRaysDesc.HitGroupTable.SizeInBytes = dispatchRaysDesc.HitGroupTable.StrideInBytes * tableLayout[2].numOfRecords;
+
+	return dispatchRaysDesc;
+}
+
 void Engine::ShadingTable::validateInputs()
 {
 	bool rayGenEncountered = false;
@@ -206,17 +234,17 @@ void Engine::ShadingTable::validateInputs()
 			switch (parameter.ParameterType) {
 				case D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE:
 					if (shadingRecord.descriptorHeapMap.find(parameterName) == shadingRecord.descriptorHeapMap.end())
-						throw runtime_error("Empty input for parameter '" + parameterName + "'");
+						throw runtime_error("Empty input for parameter '" + parameterName + "' in program '" + string(shadingRecord.programName.begin(), shadingRecord.programName.end()) + "'");
 					break;
 				case D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS:
 					if (shadingRecord.constantsMap.find(parameterName) == shadingRecord.constantsMap.end())
-						throw runtime_error("Empty input for parameter '" + parameterName + "'");
+						throw runtime_error("Empty input for parameter '" + parameterName + "' in program '" + string(shadingRecord.programName.begin(), shadingRecord.programName.end()) + "'");
 					break;
 				case D3D12_ROOT_PARAMETER_TYPE_CBV:
 				case D3D12_ROOT_PARAMETER_TYPE_SRV:
 				case D3D12_ROOT_PARAMETER_TYPE_UAV:
 					if (shadingRecord.viewsMap.find(parameterName) == shadingRecord.viewsMap.end())
-						throw runtime_error("Empty input for parameter '" + parameterName + "'");
+						throw runtime_error("Empty input for parameter '" + parameterName + "' in program '" + string(shadingRecord.programName.begin(), shadingRecord.programName.end()) + "'");
 					break;
 			}
 		}
