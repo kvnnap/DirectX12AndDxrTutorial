@@ -21,6 +21,9 @@
 #include "Scene.h"
 #include "UniformSampler.h"
 
+#include "RootSignatureManager.h"
+#include "ShadingTable.h"
+
 namespace Engine {
 	class RTGraphics 
 		: public IRenderer
@@ -97,5 +100,8 @@ namespace Engine {
 
 		Scene scene;
 		UniformSampler sampler;
+
+		std::shared_ptr<RootSignatureManager> rootSignatureManager;
+		std::unique_ptr<ShadingTable> shadingTable;
 	};
 }

@@ -3,6 +3,7 @@
 #include "Engine/Graphics.h"
 #include "Engine/RTGraphics.h"
 
+#define NOMINMAX
 #include <Windows.h>
 #include <string>
 #include <iostream>

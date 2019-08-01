@@ -81,6 +81,9 @@ RTGraphics::RTGraphics(HWND hWnd)
 		1.f,
 		10.f);
 
+	rootSignatureManager = make_shared<RootSignatureManager>();
+	shadingTable = make_unique<ShadingTable>(rootSignatureManager);
+
 	// Setup ImGui
 	bool valid = IMGUI_CHECKVERSION();
 	pImGuiDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 1u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
@@ -366,48 +369,38 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	indirectHitSubObject.SetClosestHitShaderImport(L"indirectChs");
 	indirectHitSubObject.SetHitGroupExport(L"IndirectHitGroup");
 
+	
 	// Third - Local Root Signature for Ray Gen shader
 	// Build the root signature descriptor and create root signature
-	vector<CD3DX12_DESCRIPTOR_RANGE1> descriptorRanges = {
-		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE), //gOutput, gRadiance
-		CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE) //gRtScene
-	};
-	
-	// Add textures
-	if (!textures.empty()) {
-		descriptorRanges.push_back(CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 5, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); 
-	}
-	
-	std::vector<CD3DX12_ROOT_PARAMETER1> rayGenRootParams;
-	rayGenRootParams.resize(2);
-	rayGenRootParams[0].InitAsDescriptorTable(descriptorRanges.size(), descriptorRanges.data());
-	rayGenRootParams[1].InitAsConstantBufferView(0);
-	
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc(rayGenRootParams.size(), rayGenRootParams.data(), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
-	wrl::ComPtr<ID3D12RootSignature> rootSignature = DXUtil::createRootSignature(pDevice, rootSignatureDesc);
+	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));//gOutput, gRadiance
+	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); //gRtScene
 
-	// Set the local root signature sub object
-	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT rgLocalRootSignatureSubObject(stateObjectDesc);
-	rgLocalRootSignatureSubObject.SetRootSignature(rootSignature.Get());
+	if (!textures.empty()) {
+		rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 5, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));
+	}
+
+	const auto& ranges = rootSignatureManager->getDescriptorRanges("BVHAndTextures");
+	rootSignatureManager->setDescriptorTableParameter("BVHAndTexturesDescTable", "BVHAndTextures");
+
+	CD3DX12_ROOT_PARAMETER1 param;
+	param.InitAsConstantBufferView(0);
+	rootSignatureManager->setParameter("ConstBuff", param);
+
+	rootSignatureManager->addParametersToRootSignature("RayGenRootSignature", { "BVHAndTexturesDescTable", "ConstBuff" });
+	rootSignatureManager->generateRootSignature("RayGenRootSignature", pDevice);
 
 	// Fourth - Associate the local root signature to registers in shaders (in the rayGen program) using Export Association
-	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT rgAssociation(stateObjectDesc);
-	rgAssociation.AddExport(L"rayGen");
-	rgAssociation.SetSubobjectToAssociate(rgLocalRootSignatureSubObject);
+	shadingTable->addProgram(L"rayGen", RayGeneration, "RayGenRootSignature");
 
 	// Fifth - create empty lrs for miss program
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC emptyRootSignatureDesc(0, static_cast<CD3DX12_ROOT_PARAMETER1*>(nullptr), 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
-	wrl::ComPtr<ID3D12RootSignature> emptyRootSignature = DXUtil::createRootSignature(pDevice, emptyRootSignatureDesc);
-	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT emptyLocalRootSignatureSubObject(stateObjectDesc);
-	emptyLocalRootSignatureSubObject.SetRootSignature(emptyRootSignature.Get());
+	rootSignatureManager->addRootSignature("EmptyRootSignature");
+	rootSignatureManager->generateRootSignature("EmptyRootSignature", pDevice);
 
 	// Sixth - Associate the empty local root signature with the miss programs
-	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT emptyAssociation(stateObjectDesc);
-	emptyAssociation.AddExport(L"miss");
-	emptyAssociation.AddExport(L"indirectMiss");
-	emptyAssociation.AddExport(L"ShadowHitGroup");
-	emptyAssociation.AddExport(L"IndirectHitGroup");
-	emptyAssociation.SetSubobjectToAssociate(emptyLocalRootSignatureSubObject);
+	shadingTable->addProgram(L"miss", Miss, "EmptyRootSignature");
+	shadingTable->addProgram(L"indirectMiss", Miss, "EmptyRootSignature");
+	shadingTable->addProgram(L"ShadowHitGroup", HitGroup, "EmptyRootSignature");
+	shadingTable->addProgram(L"IndirectHitGroup", HitGroup, "EmptyRootSignature");
 
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
@@ -422,25 +415,22 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	sampler.RegisterSpace = 0;
 	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-	// Create root signature having constant buffer and SRV
-	std::vector<CD3DX12_ROOT_PARAMETER1> chsRootParams;
-	chsRootParams.resize(6);
-	chsRootParams[0].InitAsConstantBufferView(0);
-	chsRootParams[1].InitAsShaderResourceView(1);
-	chsRootParams[2] = rayGenRootParams[0];
-	chsRootParams[3].InitAsShaderResourceView(2);
-	chsRootParams[4].InitAsShaderResourceView(3);
-	chsRootParams[5].InitAsShaderResourceView(4);
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC cbvRootSignatureDesc(chsRootParams.size(), chsRootParams.data(), 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
-	wrl::ComPtr<ID3D12RootSignature> cbvRootSignature = DXUtil::createRootSignature(pDevice, cbvRootSignatureDesc);
-	// Set the local root signature sub object
-	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT cbvLocalRootSignatureSubObject(stateObjectDesc);
-	cbvLocalRootSignatureSubObject.SetRootSignature(cbvRootSignature.Get());
+	// Create Hit root signature parameters
+	param.InitAsShaderResourceView(1); rootSignatureManager->setParameter("verts", param);
+	param.InitAsShaderResourceView(2); rootSignatureManager->setParameter("faceAttributes", param);
+	param.InitAsShaderResourceView(3); rootSignatureManager->setParameter("materials", param);
+	param.InitAsShaderResourceView(4); rootSignatureManager->setParameter("texVerts", param);
+
+	rootSignatureManager->addParametersToRootSignature("HitRootSignature", { "ConstBuff",  "verts",  "BVHAndTexturesDescTable", "faceAttributes", "materials", "texVerts" });
+	rootSignatureManager->setSamplerForRootSignature("HitRootSignature", sampler);
+	rootSignatureManager->generateRootSignature("HitRootSignature", pDevice);
 
 	// Associate cbv signature with hit program
-	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT hitAssociation(stateObjectDesc);
-	hitAssociation.AddExport(L"HitGroup");
-	hitAssociation.SetSubobjectToAssociate(cbvLocalRootSignatureSubObject);
+	shadingTable->addProgram(L"HitGroup", HitGroup, "HitRootSignature");
+
+	// Generate/add subobjects
+	rootSignatureManager->addRootSignaturesToSubObject(stateObjectDesc);
+	shadingTable->addProgramAssociationsToSubobject(stateObjectDesc);
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
