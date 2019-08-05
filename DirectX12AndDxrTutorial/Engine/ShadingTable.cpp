@@ -18,7 +18,27 @@ void Engine::ShadingTable::addProgram(const wstring& programName, ShadingRecordT
 	shadingRecords.push_back({ programName, rootSignatureName, shadingRecordType });
 }
 
-void Engine::ShadingTable::setInputForDescriptorTableParameter(const wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+DescriptorHeap& Engine::ShadingTable::generateDescriptorHeap(const std::string& parameterName, const std::string& instanceName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice)
+{
+	descriptorHeaps.emplace(instanceName, DescriptorHeap(rootSignatureManager, parameterName, instanceName, pDevice));
+	return descriptorHeaps.at(instanceName);
+}
+
+//void Engine::ShadingTable::setInputForDescriptorTableParameter(const wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap)
+//{
+//	// Get Program data
+//	auto& programStruct = shadingRecords[shadingRecordsMap.at(programName)];
+//
+//	// Check if correct type
+//	const auto& parameter = rootSignatureManager->getParameterForRootSignature(programStruct.rootSignatureName, parameterName);
+//	if (parameter.ParameterType != D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
+//		throw runtime_error("Paramter '" + parameterName + "' not a descriptor table type");
+//
+//	// Set
+//	programStruct.descriptorHeapMap[parameterName] = descriptorHeap;
+//}
+
+void Engine::ShadingTable::setInputForDescriptorTableParameter(const std::wstring& programName, const std::string& parameterName, const std::string& instanceName)
 {
 	// Get Program data
 	auto& programStruct = shadingRecords[shadingRecordsMap.at(programName)];
@@ -29,7 +49,7 @@ void Engine::ShadingTable::setInputForDescriptorTableParameter(const wstring& pr
 		throw runtime_error("Paramter '" + parameterName + "' not a descriptor table type");
 
 	// Set
-	programStruct.descriptorHeapMap[parameterName] = descriptorHeap;
+	programStruct.managedDescriptorHeapMap[parameterName] = &descriptorHeaps.at(instanceName);
 }
 
 void Engine::ShadingTable::setInputForViewParameter(const wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12Resource> resource)
@@ -132,7 +152,10 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Engine::ShadingTable::generateShadingTabl
 			switch (parameter.ParameterType) {
 				case D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE:
 				{	// Get heap
-					const auto& descriptorHeap = shadingRecord.descriptorHeapMap.at(parameterName);
+					const auto d = shadingRecord.managedDescriptorHeapMap.at(parameterName);
+					
+					const auto& descriptorHeap = d->getDescriptorHeap();
+					//const auto& descriptorHeap = shadingRecord.descriptorHeapMap.at(parameterName);
 					UINT64 descriptorTableHandle = descriptorHeap->GetGPUDescriptorHandleForHeapStart().ptr;
 					memcpy(localBuffer, &descriptorTableHandle, sizeof(descriptorTableHandle));
 				}
@@ -233,8 +256,9 @@ void Engine::ShadingTable::validateInputs()
 
 			switch (parameter.ParameterType) {
 				case D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE:
-					if (shadingRecord.descriptorHeapMap.find(parameterName) == shadingRecord.descriptorHeapMap.end())
+					if (shadingRecord.managedDescriptorHeapMap.find(parameterName) == shadingRecord.managedDescriptorHeapMap.end())
 						throw runtime_error("Empty input for parameter '" + parameterName + "' in program '" + string(shadingRecord.programName.begin(), shadingRecord.programName.end()) + "'");
+					shadingRecord.managedDescriptorHeapMap.at(parameterName)->validate();
 					break;
 				case D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS:
 					if (shadingRecord.constantsMap.find(parameterName) == shadingRecord.constantsMap.end())
@@ -282,4 +306,62 @@ size_t Engine::ShadingTable::getLargestRecordTypeSize(ShadingRecordType shadingR
 	}
 
 	return recordSize;
+}
+
+Engine::DescriptorHeap::DescriptorHeap(std::shared_ptr<RootSignatureManager> rootSignatureManager, const std::string& parameterName, const std::string& instanceName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice)
+	: rootSignatureManager(rootSignatureManager), parameterName(parameterName), instanceName(instanceName)
+{
+	UINT32 descriptorHeapSize = rootSignatureManager->getDescriptorHeapTotalEntrySize(parameterName);
+	descriptorHeap = rootSignatureManager->generateDescriptorHeapForRangeParameter(parameterName, pDevice);
+	resources.resize(descriptorHeapSize);
+}
+
+void Engine::DescriptorHeap::setCBV(size_t entryNumber, const D3D12_CONSTANT_BUFFER_VIEW_DESC& cbvDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice)
+{
+	if (rootSignatureManager->getDescriptorHeapRangeType(parameterName, entryNumber) != D3D12_DESCRIPTOR_RANGE_TYPE_CBV)
+		throw runtime_error("Entry " + to_string(entryNumber) + " in not of type CBV");
+	pDevice->CreateConstantBufferView(&cbvDescriptor, getCpuDescHandle(entryNumber, pDevice));
+	setResource(entryNumber);
+}
+
+void Engine::DescriptorHeap::setUAV(size_t entryNumber, const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12Resource> resource)
+{
+	if (rootSignatureManager->getDescriptorHeapRangeType(parameterName, entryNumber) != D3D12_DESCRIPTOR_RANGE_TYPE_UAV)
+		throw runtime_error("Entry " + to_string(entryNumber) + " in not of type UAV");
+	pDevice->CreateUnorderedAccessView(resource.Get(), nullptr, &uavDescriptor, getCpuDescHandle(entryNumber, pDevice));
+	setResource(entryNumber, resource);
+}
+
+void Engine::DescriptorHeap::setSRV(size_t entryNumber, const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12Resource> resource)
+{
+	if (rootSignatureManager->getDescriptorHeapRangeType(parameterName, entryNumber) != D3D12_DESCRIPTOR_RANGE_TYPE_SRV)
+		throw runtime_error("Entry " + to_string(entryNumber) + " in not of type SRV");
+	pDevice->CreateShaderResourceView(resource.Get(), &srvDescriptor, getCpuDescHandle(entryNumber, pDevice));
+	setResource(entryNumber, resource);
+}
+
+void Engine::DescriptorHeap::validate() const
+{
+	for (size_t i = 0; i < resources.size(); ++i) {
+		if (!resources[i].set)
+			throw runtime_error("Entry " + to_string(i) + " of paramter '" + parameterName + "'  of instance '" + instanceName + "' is not set");
+	}
+}
+
+Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Engine::DescriptorHeap::getDescriptorHeap() const
+{
+	return descriptorHeap;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE Engine::DescriptorHeap::getCpuDescHandle(size_t entryNumber, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice) const
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	cpuDescHandle.ptr += entryNumber * pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	return cpuDescHandle;
+}
+
+void Engine::DescriptorHeap::setResource(size_t entryNumber, Microsoft::WRL::ComPtr<ID3D12Resource> resource)
+{
+	resources[entryNumber].resource = resource;
+	resources[entryNumber].set = true;
 }

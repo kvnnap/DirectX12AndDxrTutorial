@@ -66,7 +66,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pTexCoords;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;
-		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap;
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> globalEmptyRootSignature;
 
 		Microsoft::WRL::ComPtr<IDXGISwapChain4> pSwapChain;

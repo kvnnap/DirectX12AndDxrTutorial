@@ -16,6 +16,33 @@ namespace Engine {
 		HitGroup = 2
 	};
 
+	struct ResourceSet {
+		bool set = false;
+		Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+	};
+
+	class DescriptorHeap {
+	public:
+		DescriptorHeap(std::shared_ptr<RootSignatureManager> rootSignatureManager, const std::string& parameterName, const std::string& instanceName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice);
+
+		void setCBV(size_t entryNumber, const D3D12_CONSTANT_BUFFER_VIEW_DESC& cbvDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice);
+		void setUAV(size_t entryNumber, const D3D12_UNORDERED_ACCESS_VIEW_DESC& uavDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12Resource> resource = {});
+		void setSRV(size_t entryNumber, const D3D12_SHADER_RESOURCE_VIEW_DESC& srvDescriptor, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice, Microsoft::WRL::ComPtr<ID3D12Resource> resource = {});
+
+		void validate() const;
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> getDescriptorHeap() const;
+	private:
+		D3D12_CPU_DESCRIPTOR_HANDLE getCpuDescHandle(size_t entryNumber, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice) const;
+		void setResource(size_t entryNumber, Microsoft::WRL::ComPtr<ID3D12Resource> resource = {});
+
+		std::shared_ptr<RootSignatureManager> rootSignatureManager;
+		std::string parameterName;
+		std::string instanceName;
+
+		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
+		std::vector<ResourceSet> resources;
+	};
+
 	struct ShadingRecord {
 		std::wstring programName;
 		std::string rootSignatureName;
@@ -24,7 +51,8 @@ namespace Engine {
 		// paramter values
 		std::unordered_map<std::string, UINT32> constantsMap;
 		std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12Resource>> viewsMap;
-		std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> descriptorHeapMap;
+		//std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> descriptorHeapMap;
+		std::unordered_map<std::string, DescriptorHeap*> managedDescriptorHeapMap;
 	};
 
 	struct ShadingTableLayout {
@@ -45,7 +73,10 @@ namespace Engine {
 		// 
 		void addProgram(const std::wstring& programName, ShadingRecordType shadingRecordType, const std::string& rootSignatureName);
 
-		void setInputForDescriptorTableParameter(const std::wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap);
+		DescriptorHeap& generateDescriptorHeap(const std::string& parameterName, const std::string& instanceName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice);
+
+		//void setInputForDescriptorTableParameter(const std::wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap);
+		void setInputForDescriptorTableParameter(const std::wstring& programName, const std::string& parameterName, const std::string& instanceName);
 		void setInputForViewParameter(const std::wstring& programName, const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12Resource> resource);
 		void setInputForConstantParameter(const std::wstring& programName, const std::string& parameterName, UINT32 constant);
 
@@ -68,6 +99,8 @@ namespace Engine {
 		std::shared_ptr<RootSignatureManager> rootSignatureManager;
 		std::unordered_map<std::wstring, size_t> shadingRecordsMap;
 		std::vector<ShadingRecord> shadingRecords;
+
+		std::unordered_map<std::string, DescriptorHeap> descriptorHeaps;
 
 		ShadingTableLayout tableLayout[3];
 

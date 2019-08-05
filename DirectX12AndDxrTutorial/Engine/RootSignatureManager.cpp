@@ -77,25 +77,43 @@ Microsoft::WRL::ComPtr<ID3D12RootSignature> Engine::RootSignatureManager::genera
 	return customRootDesc.compiledSignature = DXUtil::createRootSignature(pDevice, rootSignatureDesc);
 }
 
-Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Engine::RootSignatureManager::generateDescriptorHeapForRangeParameter(const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice) const
+UINT32 Engine::RootSignatureManager::getDescriptorHeapTotalEntrySize(const std::string& parameterName) const
 {
-	const auto& parameter = parameters.at(parameterName);
+	validateDescriptorHeap(parameterName);
 
-	if (parameter.ParameterType != D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
-		throw runtime_error("Paramter is not of type D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE");
+	const auto& parameter = parameters.at(parameterName);
 
 	UINT32 numDescriptors = 0;
 	for (UINT32 i = 0; i < parameter.DescriptorTable.NumDescriptorRanges; ++i) {
 		const auto& range = parameter.DescriptorTable.pDescriptorRanges[i];
-		if (range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_SRV && range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_UAV && range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_CBV)
-			throw runtime_error("Range Type must be CBV/SRV/UAV - create descriptor heap manually for other types");
 		numDescriptors += range.NumDescriptors;
 	}
 
-	if (numDescriptors == 0)
-		throw runtime_error("Paramter ranges are empty (0 descriptors in each)");
+	return numDescriptors;
+}
 
-	return DXUtil::createDescriptorHeap(pDevice, numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> Engine::RootSignatureManager::generateDescriptorHeapForRangeParameter(const std::string& parameterName, Microsoft::WRL::ComPtr<ID3D12Device5> pDevice) const
+{
+	return DXUtil::createDescriptorHeap(pDevice, getDescriptorHeapTotalEntrySize(parameterName), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
+}
+
+D3D12_DESCRIPTOR_RANGE_TYPE Engine::RootSignatureManager::getDescriptorHeapRangeType(const std::string& parameterName, size_t entryNumber) const
+{
+	validateDescriptorHeap(parameterName);
+
+	const auto& parameter = parameters.at(parameterName);
+
+	UINT32 numDescriptors = 0;
+	for (UINT32 i = 0; i < parameter.DescriptorTable.NumDescriptorRanges; ++i) {
+		const auto& range = parameter.DescriptorTable.pDescriptorRanges[i];
+		numDescriptors += range.NumDescriptors;
+		
+		if (entryNumber < numDescriptors) {
+			return range.RangeType;
+		}
+	}
+
+	throw runtime_error("Entry number is out of range, this heap has " + to_string(numDescriptors) + " entries");
 }
 
 void Engine::RootSignatureManager::addRootSignaturesToSubObject(CD3DX12_STATE_OBJECT_DESC& stateObjectDesc)
@@ -129,4 +147,23 @@ const D3D12_ROOT_PARAMETER1& Engine::RootSignatureManager::getParameterForRootSi
 const RootSignature& Engine::RootSignatureManager::getRootSignature(const std::string& rootSignatureName) const
 {
 	return rootSignatures.at(rootSignatureName);
+}
+
+void Engine::RootSignatureManager::validateDescriptorHeap(const std::string& parameterName) const
+{
+	const auto& parameter = parameters.at(parameterName);
+
+	if (parameter.ParameterType != D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
+		throw runtime_error("Paramter is not of type D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE");
+
+	UINT32 numDescriptors = 0;
+	for (UINT32 i = 0; i < parameter.DescriptorTable.NumDescriptorRanges; ++i) {
+		const auto& range = parameter.DescriptorTable.pDescriptorRanges[i];
+		if (range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_SRV && range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_UAV && range.RangeType != D3D12_DESCRIPTOR_RANGE_TYPE_CBV)
+			throw runtime_error("Range Type must be CBV/SRV/UAV - create descriptor heap manually for other types");
+		numDescriptors += range.NumDescriptors;
+	}
+
+	if (numDescriptors == 0)
+		throw runtime_error("Paramter ranges are empty (0 descriptors in each)");
 }

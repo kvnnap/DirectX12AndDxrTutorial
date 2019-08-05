@@ -112,8 +112,8 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	scene.loadScene("CornellBox-Original.obj");
-	//scene.loadScene("sibenik.obj");
+	//scene.loadScene("CornellBox-Original.obj");
+	scene.loadScene("sibenik.obj");
 	scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
@@ -205,7 +205,7 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 {
 	pCurrentCommandList = pCommandQueue->getCommandList();
 
-	pCurrentCommandList->SetDescriptorHeaps(1u, srvDescriptorHeap.GetAddressOf());
+	pCurrentCommandList->SetDescriptorHeaps(1u, descriptorHeap.GetAddressOf());
 
 	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
@@ -447,7 +447,8 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 void Engine::RTGraphics::createShaderResources()
 {
 	// The descriptor heap to store SRV (Shader resource View) and UAV (Unordered access view) descriptors
-	srvDescriptorHeap = rootSignatureManager->generateDescriptorHeapForRangeParameter("BVHAndTexturesDescTable", pDevice);
+	auto& descHeapManager = shadingTable->generateDescriptorHeap("BVHAndTexturesDescTable", "BVHTextures1", pDevice);
+	descriptorHeap = descHeapManager.getDescriptorHeap();
 
 	// The output resource
 	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -457,11 +458,10 @@ void Engine::RTGraphics::createShaderResources()
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; // In below, set it at the first location of this heap
 
-	D3D12_CPU_DESCRIPTOR_HANDLE cpuDescHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	pDevice->CreateUnorderedAccessView(outputRTTexture.Get(), nullptr, &uavDesc, cpuDescHandle);
+	size_t entryNumber = 0;
 
-	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	pDevice->CreateUnorderedAccessView(radianceTexture.Get(), nullptr, &uavDesc, cpuDescHandle);
+	descHeapManager.setUAV(entryNumber++, uavDesc, pDevice, outputRTTexture);
+	descHeapManager.setUAV(entryNumber++, uavDesc, pDevice, radianceTexture);
 
 	// Create the SRV descriptor in second place (following same order as in root signature)
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -469,8 +469,7 @@ void Engine::RTGraphics::createShaderResources()
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.RaytracingAccelerationStructure.Location = tlasBuffers.pResult->GetGPUVirtualAddress();
 
-	cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	pDevice->CreateShaderResourceView(nullptr, &srvDesc, cpuDescHandle);
+	descHeapManager.setSRV(entryNumber++, srvDesc, pDevice);
 
 	srvDesc = {};
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -478,8 +477,7 @@ void Engine::RTGraphics::createShaderResources()
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = 1;
 	for (const auto& texture : textures) {
-		cpuDescHandle.ptr += pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-		pDevice->CreateShaderResourceView(texture.Get(), &srvDesc, cpuDescHandle);
+		descHeapManager.setSRV(entryNumber++, srvDesc, pDevice, texture);
 	}
 }
 
@@ -510,12 +508,12 @@ void Engine::RTGraphics::createMaterialsAndFaceAttributes()
 wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID3D12Resource>& shaderTableTempResource)
 {
 	// Link elements
-	shadingTable->setInputForDescriptorTableParameter(L"rayGen", "BVHAndTexturesDescTable", srvDescriptorHeap);
+	shadingTable->setInputForDescriptorTableParameter(L"rayGen", "BVHAndTexturesDescTable", "BVHTextures1");
 	shadingTable->setInputForViewParameter(L"rayGen", "ConstBuff", pConstantBuffer);
 
 	shadingTable->setInputForViewParameter(L"HitGroup", "ConstBuff", pConstantBuffer);
 	shadingTable->setInputForViewParameter(L"HitGroup", "verts", vertexBuffers[0]);
-	shadingTable->setInputForDescriptorTableParameter(L"HitGroup", "BVHAndTexturesDescTable", srvDescriptorHeap);
+	shadingTable->setInputForDescriptorTableParameter(L"HitGroup", "BVHAndTexturesDescTable", "BVHTextures1");
 	shadingTable->setInputForViewParameter(L"HitGroup", "faceAttributes", pFaceAttributes);
 	shadingTable->setInputForViewParameter(L"HitGroup", "materials", pMaterials);
 	shadingTable->setInputForViewParameter(L"HitGroup", "texVerts", pTexCoords);
