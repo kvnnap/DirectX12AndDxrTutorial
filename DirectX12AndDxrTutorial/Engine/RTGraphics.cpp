@@ -112,9 +112,10 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	//scene.loadScene("CornellBox-Original.obj");
-	scene.loadScene("sibenik.obj");
-	scene.flattenGroups();
+	scene.loadScene("CornellBox-Original.obj");
+	//scene.loadScene("sibenik.obj");
+	//scene.loadScene("SunTempleModel_v2.obj");
+	//scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
 	const auto& geometry = scene.getVertices();
@@ -133,26 +134,36 @@ void Engine::RTGraphics::init()
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	std::vector<wrl::ComPtr<ID3D12Resource>> intermediateBuffers;
-	intermediateBuffers.resize(geometry.size());
-	vertexBuffers.clear();
+	intermediateBuffers.resize(1);
 
-	for (size_t i = 0; i < geometry.size(); ++i) {
-		const auto& geo = geometry[i];
-		vertexBuffers.push_back(DXUtil::uploadDataToDefaultHeap(
-			pDevice,
-			pCurrentCommandList,
-			intermediateBuffers[i], 
-			geo.data(),
-			geo.size() * sizeof(dx::XMFLOAT3),
-			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-	}
+	auto flattenedVerts = scene.getFlattenedVertices();
+	vertexBuffer = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		intermediateBuffers[0], 
+		flattenedVerts.data(),
+		flattenedVerts.size() * sizeof(dx::XMFLOAT3),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	std::vector<size_t> vertexCounts;
 	std::transform(geometry.begin(), geometry.end(), std::back_inserter(vertexCounts), [](const std::vector<dx::XMFLOAT3>& v) -> size_t {return v.size(); });
 
-	blasBuffers = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, vertexBuffers, vertexCounts, sizeof(dx::XMFLOAT3));
+	blasBuffers.resize(geometry.size());
+
+	std::vector<wrl::ComPtr<ID3D12Resource>> blasBuffersResult (blasBuffers.size());
+
+	size_t offset = 0;
+	for (size_t i = 0; i < blasBuffers.size(); ++i) {
+		blasBuffers[i] = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, { vertexBuffer->GetGPUVirtualAddress() + sizeof(dx::XMFLOAT3) * offset}, { vertexCounts[i] }, sizeof(dx::XMFLOAT3));
+		blasBuffersResult[i] = blasBuffers[i].pResult;
+		size_t temp = offset;
+		offset += vertexCounts[i];
+		vertexCounts[i] = temp / 3;
+	}
+
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
-	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, tlasTempBuffer, 0.f, false, tlasBuffers);
+
+	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffersResult, tlasTempBuffer, vertexCounts, 0.f, false, tlasBuffers);
 
 	// load textures
 	vector<wrl::ComPtr<ID3D12Resource>> texTempBuffer;
@@ -270,7 +281,12 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	ImGui::NewFrame();
 
 	//// Create ImGui Window
-	ImGui::Begin("Drawables");
+	ImGui::Begin("Lights");
+	for (int i = 0; i < cBuff.numLights; ++i) {
+		/*ImGui::PushID(i);
+		ImGui::SliderFloat("X", const_cast<float*>(&scene.getLights()[i].a[0].m128_f32[0]), -10.f, 10.f);
+		ImGui::PopID();*/
+	}
 
 	ImGui::End();
 
@@ -512,7 +528,7 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 	shadingTable->setInputForViewParameter(L"rayGen", "ConstBuff", pConstantBuffer);
 
 	shadingTable->setInputForViewParameter(L"HitGroup", "ConstBuff", pConstantBuffer);
-	shadingTable->setInputForViewParameter(L"HitGroup", "verts", vertexBuffers[0]);
+	shadingTable->setInputForViewParameter(L"HitGroup", "verts", vertexBuffer);
 	shadingTable->setInputForDescriptorTableParameter(L"HitGroup", "BVHAndTexturesDescTable", "BVHTextures1");
 	shadingTable->setInputForViewParameter(L"HitGroup", "faceAttributes", pFaceAttributes);
 	shadingTable->setInputForViewParameter(L"HitGroup", "materials", pMaterials);

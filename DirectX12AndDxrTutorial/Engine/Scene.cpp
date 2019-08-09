@@ -119,13 +119,19 @@ void Engine::Scene::transformLightPosition(const DirectX::XMMATRIX& mat)
 
 void Engine::Scene::flattenGroups()
 {
+	auto verts = getFlattenedVertices();
+	vertices.clear();
+	vertices.push_back(verts);
+}
+
+std::vector<DirectX::XMFLOAT3> Engine::Scene::getFlattenedVertices() const
+{
 	std::vector<DirectX::XMFLOAT3> verts;
 	for (const std::vector<DirectX::XMFLOAT3>& v : vertices) {
 		verts.insert(verts.end(), v.begin(), v.end());
 	}
 
-	vertices.clear();
-	vertices.push_back(verts);
+	return verts;
 }
 
 const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() const

@@ -41,13 +41,18 @@ float3 samplePointOnTriangle(inout uint s, float3 verts[3]) {
 	/*bool cond = (r1 + r2 > 1.f);
 	r1 = r1 * !cond + (1.f - r1) * cond;
 	r2 = r2 * !cond + (1.f - r2) * cond;*/
+
+	/*const float condVal = step(1.f, r1 + r2);
+	r1 += condVal * (1.f - 2.f * r1);
+	r2 += condVal * (1.f - 2.f * r2);*/
+
 	if (r1 + r2 > 1.f) {
 		r1 = 1.f - r1;
 		r2 = 1.f - r2;
 	}
 
-	float3 Q1 = verts[1] - verts[0];
-	float3 Q2 = verts[2] - verts[0];
+	const float3 Q1 = verts[1] - verts[0];
+	const float3 Q2 = verts[2] - verts[0];
 
 	return verts[0] + r1 * Q1 + r2 * Q2;
 }

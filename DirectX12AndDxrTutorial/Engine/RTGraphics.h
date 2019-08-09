@@ -55,7 +55,8 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Device5> pDevice;
 		std::unique_ptr<CommandQueue> pCommandQueue;
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList;
-		Util::DXUtil::AccelerationStructureBuffers blasBuffers, tlasBuffers;
+		std::vector<Util::DXUtil::AccelerationStructureBuffers> blasBuffers;
+		Util::DXUtil::AccelerationStructureBuffers tlasBuffers;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pTlasTempBuffer[numBackBuffers];
 
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
@@ -84,8 +85,7 @@ namespace Engine {
 		uint64_t frameFenceValues[numBackBuffers];
 
 		// Temporary triangle stuff here
-		D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
-		std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> vertexBuffers;
+		Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
 
 		// Root signature
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;

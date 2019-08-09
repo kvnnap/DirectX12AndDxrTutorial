@@ -62,15 +62,16 @@ namespace Util
 		static AccelerationStructureBuffers createBottomLevelAS(
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-			const std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>& pVertexBuffer,
+			const std::vector<D3D12_GPU_VIRTUAL_ADDRESS>& pVertexBuffer,
 			const std::vector<size_t>& vertexCounts,
 			UINT vertexSize);
 
 		static void buildTopLevelAS(
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-			Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer,
+			std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
 			Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
+			const std::vector<std::size_t>& instanceIds,
 			float rotation,
 			bool update,
 			AccelerationStructureBuffers& tlasBuffers);

@@ -30,6 +30,10 @@ struct IndirectPayload
 	float2 bary;
 };
 
+uint getPrimitiveIndex() {
+	return InstanceID() + PrimitiveIndex();
+}
+
 [shader("raygeneration")]
 void rayGen()
 {
@@ -244,7 +248,7 @@ float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 [shader("closesthit")]
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	const uint pIndex = PrimitiveIndex();
+	const uint pIndex = getPrimitiveIndex();
 	const uint index = pIndex * 3; 
 	
 	const float3 unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
@@ -280,7 +284,7 @@ void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttribute
 [shader("closesthit")]
 void indirectChs(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.primitiveId = PrimitiveIndex();
+	payload.primitiveId = getPrimitiveIndex();
 	payload.tHit = RayTCurrent();
 	payload.bary = attribs.barycentrics;
 }

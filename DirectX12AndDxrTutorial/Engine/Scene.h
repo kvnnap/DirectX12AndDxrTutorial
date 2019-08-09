@@ -21,6 +21,7 @@ namespace Engine {
 
 		// Flatten shapes found into obj into one big shape
 		void flattenGroups();
+		std::vector<DirectX::XMFLOAT3> getFlattenedVertices() const;
 
 		const std::vector<std::vector<DirectX::XMFLOAT3>>& getVertices() const;
 		const std::vector<DirectX::XMFLOAT2>& getTextureVertices() const;

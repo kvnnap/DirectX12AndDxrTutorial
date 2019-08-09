@@ -386,7 +386,7 @@ wrl::ComPtr<ID3D12Device5> Util::DXUtil::createRTDeviceFromAdapter(wrl::ComPtr<I
 DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(
 	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-	const std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>& pVertexBuffers,
+	const std::vector<D3D12_GPU_VIRTUAL_ADDRESS>& pVertexBuffers,
 	const std::vector<size_t>& vertexCounts,
 	UINT vertexSize)
 {
@@ -401,7 +401,7 @@ DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(
 		D3D12_RAYTRACING_GEOMETRY_DESC geometryDescriptor = {};
 		geometryDescriptor.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
 		geometryDescriptor.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-		geometryDescriptor.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetGPUVirtualAddress();
+		geometryDescriptor.Triangles.VertexBuffer.StartAddress = pVertexBuffer;
 		geometryDescriptor.Triangles.VertexBuffer.StrideInBytes = vertexSize;
 		geometryDescriptor.Triangles.VertexCount = vertexCounts[rtGeoDescriptors.size()];
 		geometryDescriptor.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
@@ -437,8 +437,9 @@ DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(
 void Util::DXUtil::buildTopLevelAS(
 	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-	Microsoft::WRL::ComPtr<ID3D12Resource> blasBuffer,
+	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
 	Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
+	const std::vector<size_t>& instanceIds,
 	float rotation,
 	bool update,
 	DXUtil::AccelerationStructureBuffers& tlasBuffers)
@@ -446,7 +447,7 @@ void Util::DXUtil::buildTopLevelAS(
 	// Query the buffer sizes that we need to allocate
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS rtStructureDescriptor = {};
 	rtStructureDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	rtStructureDescriptor.NumDescs = 1;
+	rtStructureDescriptor.NumDescs = blasBuffers.size();
 	rtStructureDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 	rtStructureDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
 	
@@ -463,22 +464,28 @@ void Util::DXUtil::buildTopLevelAS(
 		tlasBuffers.pResult = createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, prebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 	}
 
-	D3D12_RAYTRACING_INSTANCE_DESC rtInstanceDesc = {};
-	rtInstanceDesc.InstanceID = 0;
-	rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
-	rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-	rtInstanceDesc.AccelerationStructure = blasBuffer->GetGPUVirtualAddress();
-	DirectX::XMMATRIX identity = DirectX::XMMatrixRotationZ(rotation);
-	memcpy(rtInstanceDesc.Transform, &identity, sizeof(rtInstanceDesc.Transform));
-	rtInstanceDesc.InstanceMask = 0xFF;
+	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> rtInstanceDescs;
+	rtInstanceDescs.resize(blasBuffers.size());
+
+	for (size_t i = 0; i < blasBuffers.size(); ++i) {
+		D3D12_RAYTRACING_INSTANCE_DESC &rtInstanceDesc = rtInstanceDescs[i];
+		rtInstanceDesc.InstanceID = instanceIds.at(i);
+		rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
+		rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+		rtInstanceDesc.AccelerationStructure = blasBuffers[i]->GetGPUVirtualAddress();
+		DirectX::XMMATRIX identity = DirectX::XMMatrixRotationZ(rotation);
+		memcpy(rtInstanceDesc.Transform, &identity, sizeof(rtInstanceDesc.Transform));
+		rtInstanceDesc.InstanceMask = 0xFF;
+	}
 
 	// Upload ray tracing instance desc to GPU
 	if (update) {
-		updateDataInDefaultHeap(pDevice, pCommandList, tlasBuffers.pInstanceDesc, tlasTempBuffer, &rtInstanceDesc, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		updateDataInDefaultHeap(pDevice, pCommandList, tlasBuffers.pInstanceDesc, tlasTempBuffer, rtInstanceDescs.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * rtInstanceDescs.size(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 	else {
-		tlasBuffers.pInstanceDesc = uploadDataToDefaultHeap(pDevice, pCommandList, tlasTempBuffer, &rtInstanceDesc, sizeof(rtInstanceDesc), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		tlasBuffers.pInstanceDesc = uploadDataToDefaultHeap(pDevice, pCommandList, tlasTempBuffer, rtInstanceDescs.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * rtInstanceDescs.size(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
+
 	rtStructureDescriptor.InstanceDescs = tlasBuffers.pInstanceDesc->GetGPUVirtualAddress();
 
 	// Descriptor for building TLAS
