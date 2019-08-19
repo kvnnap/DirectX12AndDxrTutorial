@@ -66,6 +66,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Resource> pConstantBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pTexCoords;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pMatrices;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;
 		Microsoft::WRL::ComPtr<ID3D12RootSignature> globalEmptyRootSignature;
@@ -103,5 +104,7 @@ namespace Engine {
 
 		std::shared_ptr<RootSignatureManager> rootSignatureManager;
 		std::unique_ptr<ShadingTable> shadingTable;
+
+		std::vector<DirectX::XMFLOAT3X4> groupMatrices;
 	};
 }

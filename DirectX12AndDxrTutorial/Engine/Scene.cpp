@@ -41,6 +41,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 	}
 
 	vertices.resize(shapes.size());
+	size_t totalFaceCount = 0;
 	size_t shapeNum = 0;
 
 	// for each shape
@@ -81,14 +82,11 @@ void Engine::Scene::loadScene(const string& pathToObj)
 					DirectX::XMFLOAT2 texVertex = DirectX::XMFLOAT2(attr.texcoords[texLocation], 1.f - attr.texcoords[texLocation + 1]);
 					texVertices.push_back(texVertex);
 				}
-				
-
-				if (isEmissive) {
-					areaLight.a[v] = DirectX::XMVectorSet(vertex.x, vertex.y, vertex.z, 1.f);
-				}
 			}
 
 			if (isEmissive) {
+				areaLight.instanceIndex = shapeNum;
+				areaLight.primitiveId = totalFaceCount;
 				areaLight.materialId = materialId;
 				areaLight.intensity = DirectX::XMVectorSet(1.f, 1.f, 1.f, 1.f);
 				//areaLight.intensity = DirectX::XMVectorScale(areaLight.intensity, 0.1f);
@@ -97,6 +95,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 
 			index += vertexCountForFace;
 			++faceNum;
+			++totalFaceCount;
 		}
 
 		// for each face
@@ -111,9 +110,9 @@ void Engine::Scene::loadScene(const string& pathToObj)
 void Engine::Scene::transformLightPosition(const DirectX::XMMATRIX& mat)
 {
 	for (auto& light : lights) {
-		for (std::size_t i = 0; i < std::size(light.a); ++i) {
+		/*for (std::size_t i = 0; i < std::size(light.a); ++i) {
 			light.a[i] = DirectX::XMVector3Transform(light.a[i], mat);
-		}
+		}*/
 	}
 }
 

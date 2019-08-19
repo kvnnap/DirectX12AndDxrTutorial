@@ -30,11 +30,11 @@ namespace Shaders {
 	};
 
 	struct AreaLight {
-		DirectX::XMVECTOR a[3];
 		DirectX::XMVECTOR intensity;
-
+		std::uint32_t instanceIndex;
+		std::uint32_t primitiveId;
 		std::uint32_t materialId;
-		float padding[3];
+		std::uint32_t padding[1];
 	};
 
 	struct ConstBuff {
@@ -74,10 +74,11 @@ struct Camera {
 };
 
 struct AreaLight {
-	float4 a[3];
 	float4 intensity;
+	uint instanceIndex;
+	uint primitiveId;
 	uint materialId;
-	uint3 padding;
+	uint padding;
 };
 
 struct ConstBuff {

@@ -6,6 +6,7 @@
 #include <wrl/client.h>
 
 #include <vector>
+#include <DirectXMath.h>
 
 namespace Util 
 {
@@ -72,7 +73,7 @@ namespace Util
 			std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
 			Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
 			const std::vector<std::size_t>& instanceIds,
-			float rotation,
+			const std::vector<DirectX::XMFLOAT3X4>& transforms,
 			bool update,
 			AccelerationStructureBuffers& tlasBuffers);
 	};

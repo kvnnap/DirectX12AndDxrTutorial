@@ -440,7 +440,7 @@ void Util::DXUtil::buildTopLevelAS(
 	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
 	Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
 	const std::vector<size_t>& instanceIds,
-	float rotation,
+	const std::vector<DirectX::XMFLOAT3X4>& transforms,
 	bool update,
 	DXUtil::AccelerationStructureBuffers& tlasBuffers)
 {
@@ -473,8 +473,7 @@ void Util::DXUtil::buildTopLevelAS(
 		rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
 		rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
 		rtInstanceDesc.AccelerationStructure = blasBuffers[i]->GetGPUVirtualAddress();
-		DirectX::XMMATRIX identity = DirectX::XMMatrixRotationZ(rotation);
-		memcpy(rtInstanceDesc.Transform, &identity, sizeof(rtInstanceDesc.Transform));
+		memcpy(rtInstanceDesc.Transform, &transforms[i], sizeof(rtInstanceDesc.Transform));
 		rtInstanceDesc.InstanceMask = 0xFF;
 	}
 

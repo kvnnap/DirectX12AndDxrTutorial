@@ -6,7 +6,8 @@ StructuredBuffer<float3> verts : register(t1);
 StructuredBuffer<FaceAttributes> faceAttributes : register(t2);
 StructuredBuffer<Material> materials : register(t3);
 StructuredBuffer<float2> texVerts : register(t4);
-Texture2D gTextures[]: register(t5);
+StructuredBuffer<float4x3> matrices : register(t5);
+Texture2D gTextures[]: register(t6);
 SamplerState gSampler : register(s0);
 
 // Output texture
@@ -25,10 +26,16 @@ struct RayPayload
 
 struct IndirectPayload
 {
+	uint instanceIndex;
 	uint primitiveId;
 	float tHit;
 	float2 bary;
 };
+
+float3 getUnitNormal(float3 a0, float3 a1, float3 a2, uint instanceIndex) {
+	//if (instanceIndex == 5) return float3(0, 1, 0);
+	return normalize(mul(float4(cross(a1 - a0, a2 - a0), 0.f), matrices[instanceIndex]));
+}
 
 uint getPrimitiveIndex() {
 	return InstanceID() + PrimitiveIndex();
@@ -126,7 +133,13 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	
 	AreaLight areaLight = cBuffer.areaLights[chooseInRange(seed, 0, cBuffer.numLights - 1)];
 
-	float3 pointOnLightSource = samplePointOnTriangle(seed, (float3[3])areaLight.a);
+	uint areaLightIndex = areaLight.primitiveId * 3;
+	float3 a[3];
+	a[0] = mul(float4(verts.Load(areaLightIndex    ), 1.f), matrices[areaLight.instanceIndex]);
+	a[1] = mul(float4(verts.Load(areaLightIndex + 1), 1.f), matrices[areaLight.instanceIndex]);
+	a[2] = mul(float4(verts.Load(areaLightIndex + 2), 1.f), matrices[areaLight.instanceIndex]);
+	
+	float3 pointOnLightSource = samplePointOnTriangle(seed, (float3[3])a);
 	float3 lightDirLarge = pointOnLightSource - interPoint;
 	float3 lightDir = normalize(lightDirLarge);
 
@@ -137,7 +150,7 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	}
 
 	// Check if primitive is behind the light (back face)
-	float3 lightUnitNormal = getUnitNormal((float3[3]) areaLight.a);
+	float3 lightUnitNormal = getUnitNormal(a[0], a[1], a[2]);
 	float lightShadowDot = dot(lightUnitNormal, -lightDir);
 	if (lightShadowDot <= 0.f) {
 		return radiance;
@@ -171,7 +184,7 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 
 	// Get projected area
 	float lightDistance = length(lightDirLarge);
-	float projectedArea = getTriangleArea((float3[3]) areaLight.a) * lightShadowDot / (lightDistance * lightDistance);
+	float projectedArea = getTriangleArea((float3[3]) a) * lightShadowDot / (lightDistance * lightDistance);
 
 	// Get diffuse of intersected material
 	float3 diffuse = getDiffuseValue(primitiveId, materialId, bary);
@@ -199,8 +212,8 @@ float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	float probabilityOfContinuing;
 
 	// Russian roulette
-	while (rand_next(seed) <= (probabilityOfContinuing = dot(unitNormal, indirectRay.Direction))) {
-		
+	while (rand_next(seed) <= (probabilityOfContinuing = dot(unitNormal, indirectRay.Direction))) 
+	{
 		TraceRay(
 			gRtScene,	// Acceleration Structure
 			0,			// Ray flags
@@ -223,7 +236,7 @@ float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 		// Get intersected face unit normal
 		const uint pIndex = payload.primitiveId;
 		const uint index = pIndex * 3;
-		unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
+		unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2), payload.instanceIndex);
 		if (dot(indirectRay.Direction, unitNormal) >= 0.f) {
 			break;
 		}
@@ -251,7 +264,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	const uint pIndex = getPrimitiveIndex();
 	const uint index = pIndex * 3; 
 	
-	const float3 unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2));
+	const float3 unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2), InstanceIndex());
 	const float3 dir = normalize(WorldRayDirection());
 
 	if (dot(dir, unitNormal) >= 0.f) {
@@ -266,9 +279,11 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		uint seed = asuint(payload.color[0]);
 		const float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 		//float3 interPoint = verts.Load(index) + (verts.Load(index + 1) - verts.Load(index)) * attribs.barycentrics.x + (verts.Load(index + 2) - verts.Load(index)) * attribs.barycentrics.y;
-		payload.color = 
-			explicitLighting(seed, pIndex, interPoint, unitNormal, f.materialId, attribs.barycentrics) + 
-			indirectLighting(seed, pIndex, interPoint, unitNormal, f.materialId, attribs.barycentrics);
+		payload.color =
+			explicitLighting(seed, pIndex, interPoint, unitNormal, f.materialId, attribs.barycentrics)
+			+ 
+			indirectLighting(seed, pIndex, interPoint, unitNormal, f.materialId, attribs.barycentrics)
+			;
 	}
 	else {
 		payload.color = (float3)materials[f.materialId].emission;
@@ -284,6 +299,7 @@ void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttribute
 [shader("closesthit")]
 void indirectChs(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
+	payload.instanceIndex = InstanceIndex();
 	payload.primitiveId = getPrimitiveIndex();
 	payload.tHit = RayTCurrent();
 	payload.bary = attribs.barycentrics;

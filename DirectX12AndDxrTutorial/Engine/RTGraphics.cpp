@@ -161,9 +161,21 @@ void Engine::RTGraphics::init()
 		vertexCounts[i] = temp / 3;
 	}
 
-	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
+	// Setup matrices
+	groupMatrices.resize(geometry.size());
+	DirectX::XMMATRIX matrix = DirectX::XMMatrixTranspose(DirectX::XMMatrixIdentity());
+	DirectX::XMMATRIX matrix2 = DirectX::XMMatrixTranspose(DirectX::XMMatrixRotationZ(-0.4f));
+	
+	for (size_t i = 0; i < groupMatrices.size(); ++i) {
+		auto& mat = /*i == 7 ? matrix2 : */matrix;
+		auto& groupMatrix = groupMatrices[i];
+		memcpy(groupMatrix.m[0], &mat.r[0], sizeof(DirectX::XMVECTOR));
+		memcpy(groupMatrix.m[1], &mat.r[1], sizeof(DirectX::XMVECTOR));
+		memcpy(groupMatrix.m[2], &mat.r[2], sizeof(DirectX::XMVECTOR));
+	}
 
-	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffersResult, tlasTempBuffer, vertexCounts, 0.f, false, tlasBuffers);
+	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
+	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffersResult, tlasTempBuffer, vertexCounts, groupMatrices, false, tlasBuffers);
 
 	// load textures
 	vector<wrl::ComPtr<ID3D12Resource>> texTempBuffer;
@@ -201,6 +213,16 @@ void Engine::RTGraphics::init()
 	
 	createShaderResources();
 	createMaterialsAndFaceAttributes();
+
+	// Copy matrices
+	wrl::ComPtr<ID3D12Resource> matrixTempBuffer;
+	pMatrices = DXUtil::uploadDataToDefaultHeap(
+		pDevice,
+		pCurrentCommandList,
+		matrixTempBuffer,
+		groupMatrices.data(),
+		sizeof(decltype(groupMatrices)::value_type) * groupMatrices.size(),
+		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
 	pShadingTable = createShaderTable(shaderTableTempBuffer);
@@ -373,7 +395,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); //gRtScene
 
 	if (!textures.empty()) {
-		rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 5, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));
+		rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, textures.size(), 6, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));
 	}
 
 	rootSignatureManager->setDescriptorTableParameter("BVHAndTexturesDescTable", "BVHAndTextures");
@@ -414,8 +436,9 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	param.InitAsShaderResourceView(2); rootSignatureManager->setParameter("faceAttributes", param);
 	param.InitAsShaderResourceView(3); rootSignatureManager->setParameter("materials", param);
 	param.InitAsShaderResourceView(4); rootSignatureManager->setParameter("texVerts", param);
+	param.InitAsShaderResourceView(5); rootSignatureManager->setParameter("matrices", param);
 
-	rootSignatureManager->addParametersToRootSignature("HitRootSignature", { "ConstBuff",  "verts",  "BVHAndTexturesDescTable", "faceAttributes", "materials", "texVerts" });
+	rootSignatureManager->addParametersToRootSignature("HitRootSignature", { "ConstBuff",  "verts",  "BVHAndTexturesDescTable", "faceAttributes", "materials", "texVerts", "matrices" });
 	rootSignatureManager->setSamplerForRootSignature("HitRootSignature", sampler);
 	rootSignatureManager->generateRootSignature("HitRootSignature", pDevice);
 
@@ -430,7 +453,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 
 	// Seventh - Shader Configuration (set payload sizes - the actual program parameters)
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT shaderConfig(stateObjectDesc);
-	shaderConfig.Config(4 * sizeof(float), 2 * sizeof(float));
+	shaderConfig.Config(5 * sizeof(float), 2 * sizeof(float));
 
 	// Eighth - Associate the shader configuration with all shader programs
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT shaderConfigAssociation(stateObjectDesc);
@@ -533,6 +556,7 @@ wrl::ComPtr<ID3D12Resource> Engine::RTGraphics::createShaderTable(wrl::ComPtr<ID
 	shadingTable->setInputForViewParameter(L"HitGroup", "faceAttributes", pFaceAttributes);
 	shadingTable->setInputForViewParameter(L"HitGroup", "materials", pMaterials);
 	shadingTable->setInputForViewParameter(L"HitGroup", "texVerts", pTexCoords);
+	shadingTable->setInputForViewParameter(L"HitGroup", "matrices", pMatrices);
 
 	return shadingTable->generateShadingTable(pDevice, pCurrentCommandList, pStateObject, shaderTableTempResource);
 }
