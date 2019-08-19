@@ -118,7 +118,7 @@ void Engine::RTGraphics::init()
 	//scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
-	const auto& geometry = scene.getVertices();
+	const auto& shapes = scene.getShapes();
 
 	pCurrentCommandList = pCommandQueue->getCommandList();
 
@@ -146,9 +146,9 @@ void Engine::RTGraphics::init()
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	std::vector<size_t> vertexCounts;
-	std::transform(geometry.begin(), geometry.end(), std::back_inserter(vertexCounts), [](const std::vector<dx::XMFLOAT3>& v) -> size_t {return v.size(); });
+	std::transform(shapes.begin(), shapes.end(), std::back_inserter(vertexCounts), [](const Shape& s) -> size_t {return s.getVertices().size(); });
 
-	blasBuffers.resize(geometry.size());
+	blasBuffers.resize(shapes.size());
 
 	std::vector<wrl::ComPtr<ID3D12Resource>> blasBuffersResult (blasBuffers.size());
 
@@ -162,16 +162,14 @@ void Engine::RTGraphics::init()
 	}
 
 	// Setup matrices
-	groupMatrices.resize(geometry.size());
-	DirectX::XMMATRIX matrix = DirectX::XMMatrixTranspose(DirectX::XMMatrixIdentity());
-	DirectX::XMMATRIX matrix2 = DirectX::XMMatrixTranspose(DirectX::XMMatrixRotationZ(-0.4f));
+	groupMatrices.resize(shapes.size());
 	
 	for (size_t i = 0; i < groupMatrices.size(); ++i) {
-		auto& mat = /*i == 7 ? matrix2 : */matrix;
-		auto& groupMatrix = groupMatrices[i];
-		memcpy(groupMatrix.m[0], &mat.r[0], sizeof(DirectX::XMVECTOR));
-		memcpy(groupMatrix.m[1], &mat.r[1], sizeof(DirectX::XMVECTOR));
-		memcpy(groupMatrix.m[2], &mat.r[2], sizeof(DirectX::XMVECTOR));
+		if (i == 7) {
+			//scene.getShape(i).setRotation(0.f, 0.f, -1.4f);
+		}
+		
+		groupMatrices[i] = shapes[i].getTransform();
 	}
 
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;

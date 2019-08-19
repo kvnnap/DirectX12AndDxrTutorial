@@ -13,7 +13,7 @@ void Engine::Scene::loadScene(const string& pathToObj)
 	using namespace  tinyobj;
 
 	// may be redundant
-	vertices.clear();
+	std::vector<std::vector<DirectX::XMFLOAT3>> vertices;
 	texVertices.clear();
 	faceAttributes.clear();
 	lights.clear();
@@ -103,6 +103,9 @@ void Engine::Scene::loadScene(const string& pathToObj)
 			faceAttributes.push_back({ static_cast<std::uint32_t>(materialId) });
 		}
 
+		// Initialise shape object
+		this->shapes.emplace_back(shape.name, move(vertices[shapeNum]));
+
 		++shapeNum;
 	}
 }
@@ -119,33 +122,24 @@ void Engine::Scene::transformLightPosition(const DirectX::XMMATRIX& mat)
 void Engine::Scene::flattenGroups()
 {
 	auto verts = getFlattenedVertices();
-	vertices.clear();
-	vertices.push_back(verts);
+	shapes.clear();
+	shapes.emplace_back("Flattened Shape", move(verts));
 }
 
 std::vector<DirectX::XMFLOAT3> Engine::Scene::getFlattenedVertices() const
 {
 	std::vector<DirectX::XMFLOAT3> verts;
-	for (const std::vector<DirectX::XMFLOAT3>& v : vertices) {
+	for (const auto& shape : shapes) {
+		const std::vector<DirectX::XMFLOAT3>& v = shape.getVertices();
 		verts.insert(verts.end(), v.begin(), v.end());
 	}
 
 	return verts;
 }
 
-const std::vector<std::vector<DirectX::XMFLOAT3>>& Engine::Scene::getVertices() const
-{
-	return vertices;
-}
-
 const std::vector<DirectX::XMFLOAT2>& Engine::Scene::getTextureVertices() const
 {
 	return texVertices;
-}
-
-const std::vector<DirectX::XMFLOAT3>& Engine::Scene::getVertices(size_t materialId) const
-{
-	return vertices.at(materialId);
 }
 
 const std::vector<Shaders::FaceAttributes>& Engine::Scene::getFaceAttributes() const
@@ -166,4 +160,14 @@ const vector<Shaders::Material>& Engine::Scene::getMaterials() const
 const std::vector<Engine::Texture>& Engine::Scene::getTextures() const
 {
 	return textures;
+}
+
+const std::vector<Shape>& Engine::Scene::getShapes() const
+{
+	return shapes;
+}
+
+Shape& Engine::Scene::getShape(std::size_t index)
+{
+	return shapes[index];
 }

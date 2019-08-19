@@ -5,6 +5,7 @@
 
 #include <DirectXMath.h>
 #include "Engine/Texture.h"
+#include "Engine/Shape.h"
 
 #include "../Shaders/RTShaders.hlsli"
 
@@ -23,17 +24,19 @@ namespace Engine {
 		void flattenGroups();
 		std::vector<DirectX::XMFLOAT3> getFlattenedVertices() const;
 
-		const std::vector<std::vector<DirectX::XMFLOAT3>>& getVertices() const;
 		const std::vector<DirectX::XMFLOAT2>& getTextureVertices() const;
-		const std::vector<DirectX::XMFLOAT3>& getVertices(size_t materialId) const;
 		const std::vector<Shaders::FaceAttributes>& getFaceAttributes() const;
 		const std::vector<Shaders::AreaLight>& getLights() const;
 		const std::vector<Shaders::Material>& getMaterials() const;
 		const std::vector<Engine::Texture>& getTextures() const;
+		const std::vector<Shape>& getShapes() const;
+		Shape& getShape(std::size_t index);
 	
 	private:
 
-		std::vector<std::vector<DirectX::XMFLOAT3>> vertices;
+		std::vector<Shape> shapes;
+
+		
 		std::vector<DirectX::XMFLOAT2> texVertices;
 
 		std::vector<Shaders::FaceAttributes> faceAttributes;

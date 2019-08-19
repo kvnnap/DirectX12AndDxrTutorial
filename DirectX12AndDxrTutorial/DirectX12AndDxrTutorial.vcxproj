@@ -168,6 +168,7 @@
     <ClCompile Include="Engine\Scene.cpp" />
     <ClCompile Include="Engine\ShadingTable.cpp" />
     <ClCompile Include="Engine\RootSignatureManager.cpp" />
+    <ClCompile Include="Engine\Shape.cpp" />
     <ClCompile Include="Util\DXUtil.cpp" />
     <ClCompile Include="Engine\Camera.cpp" />
     <ClCompile Include="Engine\CommandQueue.cpp" />
@@ -198,6 +199,7 @@
     <ClInclude Include="Engine\Scene.h" />
     <ClInclude Include="Engine\ShadingTable.h" />
     <ClInclude Include="Engine\RootSignatureManager.h" />
+    <ClInclude Include="Engine\Shape.h" />
     <ClInclude Include="Util\DXUtil.h" />
     <ClInclude Include="Engine\Camera.h" />
     <ClInclude Include="Engine\CommandQueue.h" />
