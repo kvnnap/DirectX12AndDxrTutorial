@@ -91,6 +91,13 @@ float3 linearToSrgb(float3 c)
 	return srgb;
 }
 
+float3 linearToSrgbGamma(float3 c)
+{
+	const float kInvGamma = 1.0f / 2.2f;
+	//const float kInvGamma = 1.0f / 1.8f;
+	return float3(pow(c.x, kInvGamma), pow(c.y, kInvGamma), pow(c.z, kInvGamma));
+}
+
 float3 transformPointToBasis(float3 unitNormal, float3 pt) {
 	// Create first vector perpendicular to the normal
 	const float3 u = unitNormal.y != 0.f || unitNormal.x != 0.f ?
