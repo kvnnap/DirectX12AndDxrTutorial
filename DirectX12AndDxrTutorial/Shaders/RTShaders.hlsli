@@ -8,11 +8,12 @@ namespace Shaders {
 		DirectX::XMFLOAT4 diffuse;
 		DirectX::XMFLOAT4 emission;
 		std::int32_t diffuseTextureId;
-		std::uint32_t other[3];
+		std::uint32_t padding[3];
 	};
 
 	struct FaceAttributes {
 		std::uint32_t materialId;
+		std::uint32_t areaLightId;
 	};
 
 	struct CameraPlane {
@@ -51,11 +52,12 @@ struct Material {
 	float4 diffuse;
 	float4 emission;
 	int diffuseTextureId;
-	int other[3];
+	int padding[3];
 };
 
 struct FaceAttributes {
 	uint materialId;
+	uint areaLightId;
 };
 
 struct CameraPlane {

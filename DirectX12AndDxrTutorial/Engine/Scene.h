@@ -30,12 +30,14 @@ namespace Engine {
 		const std::vector<Shaders::Material>& getMaterials() const;
 		const std::vector<Engine::Texture>& getTextures() const;
 		const std::vector<Shape>& getShapes() const;
+		const std::vector<size_t>& getFaceOffsets() const;
+		Shaders::AreaLight& getLight(std::size_t index);
 		Shape& getShape(std::size_t index);
 	
 	private:
 
 		std::vector<Shape> shapes;
-
+		std::vector<size_t> faceOffsets;
 		
 		std::vector<DirectX::XMFLOAT2> texVertices;
 

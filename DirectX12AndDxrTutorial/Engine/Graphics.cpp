@@ -250,7 +250,7 @@ void Engine::Graphics::init()
 	pCommandQueue->flush();
 }
 
-void Graphics::draw(uint64_t timeMs, bool clear)
+void Graphics::draw(uint64_t timeMs, bool& clear)
 {
 	pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
 

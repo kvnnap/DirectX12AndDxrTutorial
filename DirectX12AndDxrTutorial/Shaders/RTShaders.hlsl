@@ -286,7 +286,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 			;
 	}
 	else {
-		payload.color = (float3)materials[f.materialId].emission;
+		payload.color = (float3)(cBuffer.areaLights[f.areaLightId].intensity * materials[f.materialId].emission);
 	}
 }
 

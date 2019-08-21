@@ -437,7 +437,7 @@ DXUtil::AccelerationStructureBuffers Util::DXUtil::createBottomLevelAS(
 void Util::DXUtil::buildTopLevelAS(
 	Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-	std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
+	std::vector<Util::DXUtil::AccelerationStructureBuffers> blasBuffers,
 	Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
 	const std::vector<size_t>& instanceIds,
 	const std::vector<DirectX::XMFLOAT3X4>& transforms,
@@ -472,7 +472,7 @@ void Util::DXUtil::buildTopLevelAS(
 		rtInstanceDesc.InstanceID = instanceIds.at(i);
 		rtInstanceDesc.InstanceContributionToHitGroupIndex = 0;
 		rtInstanceDesc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
-		rtInstanceDesc.AccelerationStructure = blasBuffers[i]->GetGPUVirtualAddress();
+		rtInstanceDesc.AccelerationStructure = blasBuffers[i].pResult->GetGPUVirtualAddress();
 		memcpy(rtInstanceDesc.Transform, &transforms[i], sizeof(rtInstanceDesc.Transform));
 		rtInstanceDesc.InstanceMask = 0xFF;
 	}

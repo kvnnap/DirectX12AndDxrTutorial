@@ -190,6 +190,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="App.h" />
+    <ClInclude Include="Engine\IDrawableUI.h" />
     <ClInclude Include="Engine\IRenderer.h" />
     <ClInclude Include="Engine\RTGraphics.h" />
     <ClInclude Include="Engine\Texture.h" />

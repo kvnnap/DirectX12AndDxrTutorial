@@ -3,12 +3,14 @@
 #include <limits>
 #include <algorithm>
 
+#include "Libraries/imgui/imgui.h"
+
 using namespace std;
 using namespace Engine;
 using namespace DirectX;
 
 Engine::Shape::Shape(const std::string& name, std::vector<XMFLOAT3>&& vertices)
-	: name(name), vertices(move(vertices)), position{}, rotation{}, scale{1.f, 1.f, 1.f}
+	: changed(), name(name), vertices(move(vertices)), position{}, rotation{}, scale{1.f, 1.f, 1.f}
 {
 	constexpr float maxFloat = std::numeric_limits<float>::max();
 	constexpr float minFloat = -maxFloat;
@@ -68,4 +70,22 @@ DirectX::XMFLOAT3X4 Engine::Shape::getTransform() const
 	XMFLOAT3X4 mat;
 	XMStoreFloat3x4(&mat, matrix);
 	return mat;
+}
+
+void Engine::Shape::drawUI()
+{
+	ImGui::PushID(this);
+
+	ImGui::Text(name.c_str());
+	changed = 
+	  ImGui::DragFloat3("Position", &position.x, 0.01f)
+	| ImGui::DragFloat3("Rotation", &rotation.x, 0.01f)
+	| ImGui::DragFloat3("Scale", &scale.x, 0.01f, 0.f, 1000.f);
+	
+	ImGui::PopID();
+}
+
+bool Engine::Shape::hasChanged() const
+{
+	return changed;
 }

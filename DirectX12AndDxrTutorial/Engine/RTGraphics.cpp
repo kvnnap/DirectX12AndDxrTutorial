@@ -150,15 +150,11 @@ void Engine::RTGraphics::init()
 
 	blasBuffers.resize(shapes.size());
 
-	std::vector<wrl::ComPtr<ID3D12Resource>> blasBuffersResult (blasBuffers.size());
-
-	size_t offset = 0;
 	for (size_t i = 0; i < blasBuffers.size(); ++i) {
-		blasBuffers[i] = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, { vertexBuffer->GetGPUVirtualAddress() + sizeof(dx::XMFLOAT3) * offset}, { vertexCounts[i] }, sizeof(dx::XMFLOAT3));
-		blasBuffersResult[i] = blasBuffers[i].pResult;
-		size_t temp = offset;
-		offset += vertexCounts[i];
-		vertexCounts[i] = temp / 3;
+		size_t vertexCount = scene.getShape(i).getVertices().size();
+		blasBuffers[i] = DXUtil::createBottomLevelAS(pDevice, pCurrentCommandList, 
+			{ vertexBuffer->GetGPUVirtualAddress() + sizeof(dx::XMFLOAT3) * scene.getFaceOffsets()[i] * 3 },
+			{ vertexCount }, sizeof(dx::XMFLOAT3));
 	}
 
 	// Setup matrices
@@ -173,7 +169,7 @@ void Engine::RTGraphics::init()
 	}
 
 	wrl::ComPtr<ID3D12Resource> tlasTempBuffer;
-	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffersResult, tlasTempBuffer, vertexCounts, groupMatrices, false, tlasBuffers);
+	DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers, tlasTempBuffer, scene.getFaceOffsets(), groupMatrices, false, tlasBuffers);
 
 	// load textures
 	vector<wrl::ComPtr<ID3D12Resource>> texTempBuffer;
@@ -213,11 +209,10 @@ void Engine::RTGraphics::init()
 	createMaterialsAndFaceAttributes();
 
 	// Copy matrices
-	wrl::ComPtr<ID3D12Resource> matrixTempBuffer;
 	pMatrices = DXUtil::uploadDataToDefaultHeap(
 		pDevice,
 		pCurrentCommandList,
-		matrixTempBuffer,
+		pTempBufferMatrices[pCurrentBackBufferIndex],
 		groupMatrices.data(),
 		sizeof(decltype(groupMatrices)::value_type) * groupMatrices.size(),
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -250,7 +245,7 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 	//pCurrentCommandList->ClearRenderTargetView(rtvDescriptorHandle, color, 0, nullptr);
 }
 
-void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
+void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 {
 	// Transform vertices in TLAS
 	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 8000) / 8000.f * 6.28f, true, tlasBuffers);
@@ -267,6 +262,49 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 	shaderCamera.filmPlane.distance = 0.018f;
 	shaderCamera.filmPlane.apertureSize = 0.018f / 1.4f;
 
+	// Start the Dear ImGui frame
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	//// Create ImGui Window
+	ImGui::Begin("Shapes");
+
+	bool structureChanged = false;
+	for (int i = 0; i < scene.getShapes().size(); ++i) {
+		auto& shape = scene.getShape(i);
+		shape.drawUI();
+		if (shape.hasChanged()) {
+			structureChanged = true;
+			groupMatrices[i] = shape.getTransform();
+		}
+	}
+
+	ImGui::End();
+
+	if (structureChanged) {
+		clear = true;
+		DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers, pTlasTempBuffer[pCurrentBackBufferIndex], scene.getFaceOffsets(), groupMatrices, true, tlasBuffers);
+		DXUtil::updateDataInDefaultHeap(
+			pDevice,
+			pCurrentCommandList,
+			pMatrices,
+			pTempBufferMatrices[pCurrentBackBufferIndex],
+			groupMatrices.data(),
+			sizeof(decltype(groupMatrices)::value_type) * groupMatrices.size(),
+			D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	}
+
+	ImGui::Begin("Lights");
+
+	for (int i = 0; i < scene.getLights().size(); ++i) {
+		ImGui::PushID(&scene.getLights()[i]);
+		clear |= ImGui::SliderFloat3("Radiance Multiplier", scene.getLight(i).intensity.m128_f32, 0.f, 10.f);
+		ImGui::PopID();
+	}
+
+	ImGui::End();
+
 	// Setup area lights
 	cBuff.numLights = std::min(std::size(cBuff.areaLights), scene.getLights().size());
 	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
@@ -281,7 +319,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 		pDevice,
 		pCurrentCommandList,
 		pConstantBuffer,
-		pTlasTempBuffer[pCurrentBackBufferIndex],
+		pConstTempBuffer[pCurrentBackBufferIndex],
 		&cBuff,
 		sizeof(cBuff),
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -295,20 +333,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool clear)
 
 	pCurrentCommandList->DispatchRays(&dispatchRaysDesc);
 
-	// Start the Dear ImGui frame
-	ImGui_ImplDX12_NewFrame();
-	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
-
-	//// Create ImGui Window
-	ImGui::Begin("Lights");
-	for (int i = 0; i < cBuff.numLights; ++i) {
-		/*ImGui::PushID(i);
-		ImGui::SliderFloat("X", const_cast<float*>(&scene.getLights()[i].a[0].m128_f32[0]), -10.f, 10.f);
-		ImGui::PopID();*/
-	}
-
-	ImGui::End();
+	
 
 	// Create ImGui Test Window
 	//ImGui::Begin("Test");

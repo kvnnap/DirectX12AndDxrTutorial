@@ -26,7 +26,7 @@ int App::execute() noexcept
 	try
 	{
 		keyboard = make_unique<Keyboard>();
-		window = make_unique<Window>("DX12 & DXR Tutorial", 900, 600, keyboard.get());
+		window = make_unique<Window>("DX12 & DXR Tutorial", 1350, 900, keyboard.get());
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
 		renderer->init();
 
@@ -90,13 +90,14 @@ void App::processFrame()
 	camera.incrementDirection(getValueIfPressed('L', -deltaUnits), getValueIfPressed('I', -deltaUnits));
 	camera.incrementDirection(getValueIfPressed('J', deltaUnits), getValueIfPressed('K', deltaUnits));
 	
-	renderer->draw(msLong, keyboard->anyKeyPressed());
+	bool clear = keyboard->anyKeyPressed();
+	renderer->draw(msLong, clear);
 
 	renderer->endFrame();
 
 	//// run game code
 	
-	if (keyboard->anyKeyPressed()) {
+	if (clear) {
 		frameCounter = 0;
 	}
 	

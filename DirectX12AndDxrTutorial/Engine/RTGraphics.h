@@ -36,7 +36,7 @@ namespace Engine {
 
 		void clearBuffer(float red, float green, float blue) override;
 		void init() override;
-		void draw(uint64_t timeMs = 0, bool clear = false) override;
+		void draw(uint64_t timeMs, bool& clear) override;
 		void endFrame() override;
 		Camera& getCamera() override;
 
@@ -57,6 +57,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCurrentCommandList;
 		std::vector<Util::DXUtil::AccelerationStructureBuffers> blasBuffers;
 		Util::DXUtil::AccelerationStructureBuffers tlasBuffers;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pConstTempBuffer[numBackBuffers];
 		Microsoft::WRL::ComPtr<ID3D12Resource> pTlasTempBuffer[numBackBuffers];
 
 		Microsoft::WRL::ComPtr<ID3D12StateObject> pStateObject;
@@ -66,6 +67,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Resource> pConstantBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMaterials;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pTexCoords;
+		Microsoft::WRL::ComPtr<ID3D12Resource> pTempBufferMatrices[numBackBuffers];
 		Microsoft::WRL::ComPtr<ID3D12Resource> pMatrices;
 		Microsoft::WRL::ComPtr<ID3D12Resource> pFaceAttributes;
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap;

@@ -4,9 +4,12 @@
 #include <vector>
 #include <DirectXMath.h>
 
+#include "IDrawableUI.h"
+
 namespace Engine {
 
 	class Shape
+		: public IDrawableUI
 	{
 	public:
 		
@@ -20,7 +23,11 @@ namespace Engine {
 		const std::vector<DirectX::XMFLOAT3>& getVertices() const;
 		DirectX::XMFLOAT3X4 getTransform() const;
 
+		void drawUI() override;
+		bool hasChanged() const override;
 	private:
+		bool changed;
+
 		std::string name;
 		std::vector<DirectX::XMFLOAT3> vertices;
 

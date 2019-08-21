@@ -48,6 +48,9 @@ void Engine::Scene::loadScene(const string& pathToObj)
 	for (const auto& shape : shapes) {
 		size_t index = 0;
 		size_t faceNum = 0;
+		
+		faceOffsets.push_back(totalFaceCount);
+
 		// for each face
 		for (const auto& vertexCountForFace : shape.mesh.num_face_vertices) {
 			if (vertexCountForFace != 3) {
@@ -93,14 +96,13 @@ void Engine::Scene::loadScene(const string& pathToObj)
 				lights.push_back(areaLight);
 			}
 
+			faceAttributes.push_back({ 
+				static_cast<std::uint32_t>(materialId), 
+				static_cast<std::uint32_t>(isEmissive ? lights.size() - 1 : 0) });
+
 			index += vertexCountForFace;
 			++faceNum;
 			++totalFaceCount;
-		}
-
-		// for each face
-		for (const auto& materialId : shape.mesh.material_ids) {
-			faceAttributes.push_back({ static_cast<std::uint32_t>(materialId) });
 		}
 
 		// Initialise shape object
@@ -165,6 +167,16 @@ const std::vector<Engine::Texture>& Engine::Scene::getTextures() const
 const std::vector<Shape>& Engine::Scene::getShapes() const
 {
 	return shapes;
+}
+
+const std::vector<size_t>& Engine::Scene::getFaceOffsets() const
+{
+	return faceOffsets;
+}
+
+Shaders::AreaLight& Engine::Scene::getLight(std::size_t index)
+{
+	return lights[index];
 }
 
 Shape& Engine::Scene::getShape(std::size_t index)

@@ -70,7 +70,7 @@ namespace Util
 		static void buildTopLevelAS(
 			Microsoft::WRL::ComPtr<ID3D12Device5> pDevice,
 			Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> pCommandList,
-			std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> blasBuffers,
+			std::vector<Util::DXUtil::AccelerationStructureBuffers> blasBuffers,
 			Microsoft::WRL::ComPtr<ID3D12Resource>& tlasTempBuffer,
 			const std::vector<std::size_t>& instanceIds,
 			const std::vector<DirectX::XMFLOAT3X4>& transforms,

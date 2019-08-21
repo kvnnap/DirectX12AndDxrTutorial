@@ -29,7 +29,7 @@ namespace Engine {
 
 		void clearBuffer(float red, float green, float blue) override;
 		void init() override;
-		void draw(uint64_t timeMs = 0, bool clear = false) override;
+		void draw(uint64_t timeMs, bool& clear) override;
 		void endFrame() override;
 		Camera& getCamera() override;
 
