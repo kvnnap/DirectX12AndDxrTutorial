@@ -2,9 +2,6 @@
 
 using namespace IO;
 
-Keyboard::Keyboard() {}
-Keyboard::~Keyboard() {}
-
 void IO::Keyboard::pressKey(uint8_t key)
 {
 	if (!cSet[key]) {

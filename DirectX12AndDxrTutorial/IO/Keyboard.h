@@ -11,8 +11,7 @@ namespace IO {
 		: public IKeyboardWriter, public IKeyboardReader
 	{
 	public:
-		Keyboard();
-		virtual ~Keyboard();
+		virtual ~Keyboard() = default;
 
 		void pressKey(uint8_t key) override;
 		void depressKey(uint8_t key) override;
