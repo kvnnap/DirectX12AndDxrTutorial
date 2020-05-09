@@ -32,6 +32,7 @@ uint chooseInRange(inout uint s, uint a, uint b) {
 }
 
 static const float PI = 3.14159265f;
+static const float OneOverPI = 1.f / PI;
 
 float3 samplePointOnTriangle(inout uint s, float3 verts[3]) {
 	float r1 = rand_next(s);

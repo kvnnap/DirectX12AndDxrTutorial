@@ -32,8 +32,10 @@ struct IndirectPayload
 	float2 bary;
 };
 
+// Radius of light that is allowed to be caputed only by naive PT
+static const float allowedDistance = 0.5f;
+
 float3 getUnitNormal(float3 a0, float3 a1, float3 a2, uint instanceIndex) {
-	//if (instanceIndex == 5) return float3(0, 1, 0);
 	return normalize(mul(float4(cross(a1 - a0, a2 - a0), 0.f), matrices[instanceIndex]));
 }
 
@@ -47,10 +49,10 @@ float3 getDiffuseValue(uint primitiveId, uint materialId, float2 bary) {
 	}
 
 	const uint index = primitiveId * 3;
-	float2 a0 = texVerts.Load(index);
-	float2 a1 = texVerts.Load(index + 1);
-	float2 a2 = texVerts.Load(index + 2);
-	float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
+	const float2 a0 = texVerts.Load(index);
+	const float2 a1 = texVerts.Load(index + 1);
+	const float2 a2 = texVerts.Load(index + 2);
+	const float2 pTex = a0 + bary.x * (a1 - a0) + bary.y * (a2 - a0);
 	return (float3)gTextures[materials[materialId].diffuseTextureId].SampleLevel(gSampler, pTex, 0);
 }
 
@@ -75,6 +77,10 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	const float3 pointOnLightSource = samplePointOnTriangle(seed, (float3[3])a);
 	const float3 lightDirLarge = pointOnLightSource - interPoint;
 	const float3 lightDir = normalize(lightDirLarge);
+	const float lightDistance = length(lightDirLarge);
+	if (lightDistance < allowedDistance) {
+		return radiance;
+	}
 
 	// Check if light is behind the primitive (back face)
 	const float primitiveShadowDot = dot(unitNormal, lightDir);
@@ -115,89 +121,25 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	float3 lightRadiance = (float3)(areaLight.intensity * materials[areaLight.materialId].emission);
 
 	// Get projected area
-	float lightDistance = length(lightDirLarge);
 	float projectedArea = getTriangleArea((float3[3]) a) * lightShadowDot / (lightDistance * lightDistance);
 
 	// Get diffuse of intersected material
 	float3 diffuse = getDiffuseValue(primitiveId, materialId, bary);
 
 	radiance = lightRadiance * diffuse;
-	radiance *= cBuffer.numLights * primitiveShadowDot * projectedArea  / PI;
+	radiance *= cBuffer.numLights * primitiveShadowDot * projectedArea  * OneOverPI;
 
 	return radiance;
-}
-
-float3 indirectLighting(inout uint seed, uint primitiveId, float3 interPoint, float3 unitNormal, uint materialId, float2 bary) {
-	float3 rad = float3(0.f, 0.f, 0.f);
-	
-	// Get cosine-weighted ray
-	RayDesc indirectRay;
-	indirectRay.Origin = interPoint;
-	indirectRay.Direction = randomRayLobe(seed, unitNormal, 1);
-	indirectRay.TMin = 0.001f;
-	indirectRay.TMax = 3.402823e+38;
-
-	IndirectPayload payload;
-	float3 localCoefficients = float3(1.f, 1.f, 1.f);
-
-	// For use with russian roulette
-	float probabilityOfContinuing;
-
-	// Russian roulette
-	while (rand_next(seed) <= (probabilityOfContinuing = dot(unitNormal, indirectRay.Direction))) 
-	{
-		TraceRay(
-			gRtScene,	// Acceleration Structure
-			0,			// Ray flags
-			0xFF,		// Instance inclusion Mask (0xFF includes everything)
-			2,			// RayContributionToHitGroupIndex
-			3,			// MultiplierForGeometryContributionToShaderIndex
-			1,			// Miss shader index (within the shader table)
-			indirectRay,
-			payload);
-
-		// Traceray - get primitiveId & intersection point  (from t value)
-		if (payload.tHit == -1.f) { break; }
-
-		// Get diffuse of prev intersected material
-		float3 diffuse = getDiffuseValue(primitiveId, materialId, bary);
-
-		// Compute coefficients for this iteration
-		localCoefficients *= diffuse / probabilityOfContinuing;
-
-		// Get intersected face unit normal
-		const uint pIndex = payload.primitiveId;
-		const uint index = pIndex * 3;
-		unitNormal = getUnitNormal(verts.Load(index), verts.Load(index + 1), verts.Load(index + 2), payload.instanceIndex);
-		if (dot(indirectRay.Direction, unitNormal) >= 0.f) {
-			break;
-		}
-
-		// Get intersected face material
-		FaceAttributes f = faceAttributes.Load(pIndex);
-		materialId = f.materialId;
-		primitiveId = payload.primitiveId;
-		bary = payload.bary;
-		indirectRay.Origin += payload.tHit * indirectRay.Direction;
-
-		// explicit lighing
-		rad += localCoefficients * explicitLighting(seed, primitiveId, indirectRay.Origin, unitNormal, materialId, bary);
-
-		// Generate next ray
-		indirectRay.Direction = randomRayLobe(seed, unitNormal, 1);
-	}
-
-	return rad;
 }
 
 [shader("raygeneration")]
 void rayGen()
 {
 	// Work item index - current x,y point
-	const uint2 launchIndex = DispatchRaysIndex();
+	const uint2 launchIndex = DispatchRaysIndex().xy;
 
 	// dimensions - the previous x,y point is contained within these dimensions
-	const uint2 launchDim = DispatchRaysDimensions();
+	const uint2 launchDim = DispatchRaysDimensions().xy;
 
 	if (cBuffer.numLights == 0) {
 		gOutput[launchIndex] = float4(0.f, 0.f, 0.f, 0.f);
@@ -260,11 +202,13 @@ void rayGen()
 [shader("closesthit")]
 void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	const uint pIndex = getPrimitiveIndex();
+	uint pIndex = getPrimitiveIndex();
 	
-	const uint vIndex = pIndex * 3; 
-	const float3 unitNormal = getUnitNormal(verts.Load(vIndex), verts.Load(vIndex + 1), verts.Load(vIndex + 2), InstanceIndex());
+	uint vIndex = pIndex * 3; 
+	float3 unitNormal = getUnitNormal(verts.Load(vIndex), verts.Load(vIndex + 1), verts.Load(vIndex + 2), InstanceIndex());
 	const float3 unitRayDir = normalize(WorldRayDirection());
+
+	//Extract seed
 	uint seed = asuint(payload.color[0]);
 	payload.color = float3(0.f, 0.f, 0.f);
 
@@ -273,22 +217,82 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		return;
 	}
 	
-	const FaceAttributes fAttr = faceAttributes.Load(pIndex);
+	FaceAttributes fAttr = faceAttributes.Load(pIndex);
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
-	const float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 	//const float3 interPoint = verts.Load(vIndex) + (verts.Load(vIndex + 1) - verts.Load(vIndex)) *
 	//					  attribs.barycentrics.x + (verts.Load(vIndex + 2) - verts.Load(vIndex)) * attribs.barycentrics.y;
 
-	// We're directly hitting an emmisive primite, return its emission - might want to correct this later, as lights have diffuse props too
-	if (any(materials[fAttr.materialId].emission)) {
-		payload.color = (float3)(cBuffer.areaLights[fAttr.areaLightId].intensity * materials[fAttr.materialId].emission);
-	}
-	payload.color +=
-		explicitLighting(seed, pIndex, interPoint, unitNormal, fAttr.materialId, attribs.barycentrics)
-		+ 
-		indirectLighting(seed, pIndex, interPoint, unitNormal, fAttr.materialId, attribs.barycentrics)
-		;
+	float3 totalRadiance = float3(0.f, 0.f, 0.f);
+	float3 localCoefficients = float3(1.f, 1.f, 1.f);
+	float2 bary = attribs.barycentrics;
+	uint i = 0;
+	bool includeEmissive = true; //always include emissive the first time round (direct ray to light case)
+	do {
+		// Add emissive value.. - if includeEmissive is false, it means it was already included via `explicitLighting`
+		if (includeEmissive && any(materials[fAttr.materialId].emission)) {
+			totalRadiance += localCoefficients * (float3)(cBuffer.areaLights[fAttr.areaLightId].intensity * materials[fAttr.materialId].emission);
+		}
+
+		// Add Direct (if r >= c)
+		totalRadiance += localCoefficients * explicitLighting(seed, pIndex, interPoint, unitNormal, fAttr.materialId, bary);
+		
+
+		// Add Indirect and Direct
+		// For use with russian roulette
+		//
+		// Get cosine-weighted ray
+		RayDesc indirectRay;
+		indirectRay.Origin = interPoint;
+		indirectRay.Direction = randomRayLobe(seed, unitNormal, 1);
+		indirectRay.TMin = 0.001f;
+		indirectRay.TMax = 3.402823e+38;
+
+		IndirectPayload indirectPayload;
+		const float probabilityOfContinuing = ++i <= 6 ? 1.f : max(0.25f, dot(unitNormal, indirectRay.Direction));
+
+		if (rand_next(seed) > probabilityOfContinuing) {
+			break;
+		}
+
+		TraceRay(
+			gRtScene,	// Acceleration Structure
+			0,			// Ray flags
+			0xFF,		// Instance inclusion Mask (0xFF includes everything)
+			2,			// RayContributionToHitGroupIndex (calls indirectChs)
+			3,			// MultiplierForGeometryContributionToShaderIndex
+			1,			// Miss shader index (within the shader table) (calls indirectMiss)
+			indirectRay,
+			indirectPayload);
+
+		// Traceray - get primitiveId & intersection point  (from t value)
+		if (indirectPayload.tHit == -1.f) { 
+			break;
+		}
+
+		// Compute coefficients for this iteration (diff / p_c)
+		localCoefficients *= getDiffuseValue(pIndex, fAttr.materialId, bary) / probabilityOfContinuing;
+
+		// Get intersected face unit normal
+		pIndex = indirectPayload.primitiveId;
+		vIndex = pIndex * 3;
+		unitNormal = getUnitNormal(verts.Load(vIndex), verts.Load(vIndex + 1), verts.Load(vIndex + 2), indirectPayload.instanceIndex);
+		if (dot(indirectRay.Direction, unitNormal) >= 0.f) {
+			break;
+		}
+
+		// Get intersected face material and attributes
+		fAttr = faceAttributes.Load(pIndex);
+		bary = indirectPayload.bary;
+		interPoint += indirectPayload.tHit * indirectRay.Direction;
+
+		// tHit should be our length if indirectRay.Direction is unit
+		includeEmissive = length(indirectPayload.tHit * indirectRay.Direction) < allowedDistance;
+
+	} while (true);
+
+	payload.color = totalRadiance;
 }
 
 [shader("closesthit")]
