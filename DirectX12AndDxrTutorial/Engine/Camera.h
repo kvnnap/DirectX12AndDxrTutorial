@@ -2,8 +2,11 @@
 
 #include <DirectXMath.h>
 
+#include "IDrawableUI.h"
+
 namespace Engine {
 	class Camera
+		: public IDrawableUI
 	{
 	public:
 		Camera(const DirectX::XMVECTOR& position, const DirectX::XMVECTOR& direction, float nearWidth, float nearHeight, float nearZ, float farZ);
@@ -19,12 +22,30 @@ namespace Engine {
 
 		const DirectX::XMVECTOR& getPosition() const;
 		const DirectX::XMVECTOR& getDirection() const;
+		const DirectX::XMVECTOR& getUp() const;
 		void setPosition(const DirectX::XMVECTOR& position);
 		void setDirection(const DirectX::XMVECTOR& direction);
 
 		const DirectX::XMMATRIX& getViewMatrix() const;
 		const DirectX::XMMATRIX& getPerspectiveMatrix() const;
 		DirectX::XMMATRIX getViewPerspectiveMatrix() const;
+
+		// UI
+		void drawUI() override;
+		bool hasChanged() const override;
+
+		// Thin lens stuff
+		void setFocalLength(float focalLength);
+		void setFNumber(float fNumber);
+		void setFocalPlaneDistance(float focalPlaneDistance);
+
+		bool isThinLensEnabled() const;
+		float getFocalLength() const;
+		float getFNumber() const;
+		float getFocalPlaneDistance() const;
+		float getMagnification() const;
+		float getApertureSize() const;
+		float getFocusPointDistance() const;
 
 	private:
 		// methods
@@ -44,6 +65,15 @@ namespace Engine {
 		// Matrices
 		DirectX::XMMATRIX viewMatrix;
 		DirectX::XMMATRIX perspectiveMatrix;
+
+		bool changed;
+		bool thinLensEnabled;
+		// Thin lens stuff - things that user will change..
+		float focalLength; // In the camera world, this is distance of film plane to lens (nodal point on lens). It affects zoom
+						   // Can also be seen as filmPlaneDistance
+		float fNumber; // This is what is used to change aperture size in camera.. 
+		float focalPlaneDistance; // At `focalPlaneDistance` distance, the focal plane is found (plane where all points are in focus)
+								  // Can also be seen as objectPlaneDistance
 	};
 }
 

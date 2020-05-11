@@ -115,6 +115,7 @@ void Engine::RTGraphics::init()
 	scene.loadScene("CornellBox-Original.obj");
 	//scene.loadScene("sibenik.obj");
 	//scene.loadScene("SunTempleModel_v2.obj");
+	//scene.loadScene("tarxien_temple.obj");
 	//scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
@@ -161,10 +162,6 @@ void Engine::RTGraphics::init()
 	groupMatrices.resize(shapes.size());
 	
 	for (size_t i = 0; i < groupMatrices.size(); ++i) {
-		if (i == 7) {
-			//scene.getShape(i).setRotation(0.f, 0.f, -1.4f);
-		}
-		
 		groupMatrices[i] = shapes[i].getTransform();
 	}
 
@@ -252,20 +249,32 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 
 	Shaders::ConstBuff cBuff = {};
 
-	// Setup camera - Simulating Nikon's one
-	Shaders::Camera& shaderCamera = cBuff.camera;
-	shaderCamera.position = camera->getPosition();
-	shaderCamera.direction = camera->getDirection();
-	shaderCamera.up = dx::XMVectorSet(0, 1, 0, 0);
-	shaderCamera.filmPlane.width = 0.0235f;
-	shaderCamera.filmPlane.height = 0.0156f;
-	shaderCamera.filmPlane.distance = 0.018f;
-	shaderCamera.filmPlane.apertureSize = 0.018f / 1.4f;
-
 	// Start the Dear ImGui frame
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
+
+	ImGui::Begin("Cameras");
+	camera->drawUI();
+	clear |= camera->hasChanged();
+	ImGui::End();
+
+	// Setup camera - Simulating Nikon's one
+	Shaders::Camera& shaderCamera = cBuff.camera;
+	shaderCamera.position = camera->getPosition();
+	shaderCamera.direction = camera->getDirection();
+	shaderCamera.up = camera->getUp();
+	shaderCamera.cameraType = camera->isThinLensEnabled() ? Shaders::ThinLens : Shaders::Pinhole;
+	shaderCamera.focalLength = camera->getFocalLength();
+	shaderCamera.filmPlane.width = 0.0235f;
+	shaderCamera.filmPlane.height = 0.0156f;
+
+	if (camera->isThinLensEnabled()) {
+		shaderCamera.apertureRadius = 0.5f * camera->getApertureSize();
+		shaderCamera.focalLength *= camera->getMagnification();
+		shaderCamera.filmPlane.width *= camera->getMagnification();
+		shaderCamera.filmPlane.height *= camera->getMagnification();
+	}
 
 	//// Create ImGui Window
 	ImGui::Begin("Shapes");

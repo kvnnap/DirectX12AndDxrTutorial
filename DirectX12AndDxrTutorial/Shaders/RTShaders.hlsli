@@ -1,5 +1,12 @@
 #pragma once
 
+namespace Shaders {
+	enum CameraType {
+		Pinhole = 0,
+		ThinLens = 1
+	};
+}
+
 #ifdef __cplusplus
 #include <cstdint>
 #include "DirectXMath.h"
@@ -14,13 +21,13 @@ namespace Shaders {
 	struct FaceAttributes {
 		std::uint32_t materialId;
 		std::uint32_t areaLightId;
+		std::uint32_t padding[2];
 	};
 
 	struct CameraPlane {
 		float width;
 		float height;
-		float distance;
-		float apertureSize; // Diamater - unused for now
+		std::uint32_t padding[2];
 	};
 
 	struct Camera {
@@ -28,6 +35,10 @@ namespace Shaders {
 		DirectX::XMVECTOR direction;
 		DirectX::XMVECTOR up;
 		CameraPlane filmPlane;
+		float focalLength;
+		float apertureRadius;
+		Shaders::CameraType cameraType;
+		std::uint32_t padding[1];
 	};
 
 	struct AreaLight {
@@ -52,19 +63,19 @@ struct Material {
 	float4 diffuse;
 	float4 emission;
 	int diffuseTextureId;
-	int padding[3];
+	int3 padding;
 };
 
 struct FaceAttributes {
 	uint materialId;
 	uint areaLightId;
+	uint2 padding;
 };
 
 struct CameraPlane {
 	float width;
 	float height;
-	float distance;
-	float apertureSize; // Diamater - unused for now
+	float2 padding;
 };
 
 struct Camera {
@@ -73,6 +84,10 @@ struct Camera {
 	float3 direction;
 	float3 up;
 	CameraPlane filmPlane;
+	float focalLength;
+	float apertureRadius;
+	Shaders::CameraType cameraType;
+	float padding;
 };
 
 struct AreaLight {

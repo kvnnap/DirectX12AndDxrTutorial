@@ -158,7 +158,6 @@ void rayGen()
 
 	// Setup Ray
 	RayDesc ray;
-	ray.Origin = cBuffer.camera.position;
 	ray.TMin = 0.f;
 	ray.TMax = 3.402823e+38;
 
@@ -172,10 +171,23 @@ void rayGen()
 			cBuffer.seed1 + launchDim.x * ((uint)gRadiance[launchIndex].w + i) + launchIndex.x,
 			cBuffer.seed2 + launchDim.y * ((uint)gRadiance[launchIndex].w + i) + launchIndex.y);
 
+		ray.Origin = cBuffer.camera.position;
+
 		// Generate ray direction using camera
-		const float2 r = (launchIndex + float2(rand_next(seed), rand_next(seed))) / launchDim;
-		const float2 filmPlanePosition = float2(cBuffer.camera.filmPlane.width * (r.x - 0.5f), cBuffer.camera.filmPlane.height * (0.5f - r.y));
-		ray.Direction = (w * cBuffer.camera.filmPlane.distance + u * filmPlanePosition.x + v * filmPlanePosition.y);
+		// Note: filmPlane becomes focalPlane when using thinLens
+		const float2 ratio = (launchIndex + float2(rand_next(seed), rand_next(seed))) / launchDim;
+		const float2 filmPlanePosition = float2(cBuffer.camera.filmPlane.width * (ratio.x - 0.5f), cBuffer.camera.filmPlane.height * (0.5f - ratio.y));
+		const float3 pointOnObjectPlane = ray.Origin + w * cBuffer.camera.focalLength + u * filmPlanePosition.x + v * filmPlanePosition.y;
+
+		// If thin lens, generate random point on aperture and use that as origin
+		if (cBuffer.camera.cameraType == Shaders::CameraType::ThinLens) {
+			const float r = cBuffer.camera.apertureRadius * sqrt(rand_next(seed));
+			const float theta = 2.f * PI * rand_next(seed);
+			// x = rcos(theta), y = rsin(theta)
+			ray.Origin += r * (u * cos(theta) + v * sin(theta));
+		}
+
+		ray.Direction = normalize(pointOnObjectPlane - ray.Origin);
 
 		RayPayload payload;
 		payload.color[0] = asfloat(seed); // Interpret the bits of seed as if it was a float
