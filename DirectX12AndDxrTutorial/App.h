@@ -24,7 +24,7 @@ private:
 	long long msec, fpsMSec;
 
 	std::unique_ptr<UI::Window> window;
-	std::unique_ptr<IO::Keyboard> keyboard;
+	std::unique_ptr<feanor::io::Keyboard> keyboard;
 	std::unique_ptr<Engine::IRenderer> renderer;
 };
 

@@ -112,7 +112,7 @@ void Engine::RTGraphics::init()
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	scene.loadScene("CornellBox-Original.obj");
+	 scene.loadScene("CornellBox-Original.obj");
 	//scene.loadScene("sibenik.obj");
 	//scene.loadScene("SunTempleModel_v2.obj");
 	//scene.loadScene("tarxien_temple.obj");
@@ -266,7 +266,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 	shaderCamera.up = camera->getUp();
 	shaderCamera.cameraType = camera->isThinLensEnabled() ? Shaders::ThinLens : Shaders::Pinhole;
 	shaderCamera.focalLength = camera->getFocalLength();
-	shaderCamera.filmPlane.width = 0.0235f;
+	shaderCamera.filmPlane.width = 0.0235f; // 1.5 : 1
 	shaderCamera.filmPlane.height = 0.0156f;
 
 	if (camera->isThinLensEnabled()) {

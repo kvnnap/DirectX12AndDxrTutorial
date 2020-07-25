@@ -15,7 +15,7 @@ namespace UI {
 	public:
 		static std::optional<int> ProcessMessages();
 
-		Window(const std::string& windowName, int width, int height, IO::IKeyboardWriter* keyboardWriter = nullptr);
+		Window(const std::string& windowName, int width, int height, feanor::io::IKeyboardWriter* keyboardWriter = nullptr);
 		virtual ~Window();
 
 		HWND getHandle() const;
@@ -40,6 +40,6 @@ namespace UI {
 
 		HWND hWnd;
 
-		IO::IKeyboardWriter* keyboardWriter;
+		feanor::io::IKeyboardWriter* keyboardWriter;
 	};
 }

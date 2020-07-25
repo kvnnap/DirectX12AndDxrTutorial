@@ -85,7 +85,7 @@ void Window::cleanup()
 	}
 }
 
-Window::Window(const string& windowName, int width, int height, IO::IKeyboardWriter* keyboardWriter)
+Window::Window(const string& windowName, int width, int height, feanor::io::IKeyboardWriter* keyboardWriter)
 	: hWnd(), keyboardWriter ( keyboardWriter )
 {
 	auto dwClass = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
