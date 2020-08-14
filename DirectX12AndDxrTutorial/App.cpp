@@ -14,6 +14,7 @@
 using namespace std;
 using namespace UI;
 using feanor::io::Keyboard;
+using feanor::io::Mouse;
 
 App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec() {}
 
@@ -26,7 +27,8 @@ int App::execute() noexcept
 	try
 	{
 		keyboard = make_unique<Keyboard>();
-		window = make_unique<Window>("DX12 & DXR Tutorial", 1080, 720, keyboard.get());
+		mouse = make_unique<Mouse>();
+		window = make_unique<Window>("DX12 & DXR Tutorial", 1080, 720, keyboard.get(), mouse.get());
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
 		renderer->init();
 

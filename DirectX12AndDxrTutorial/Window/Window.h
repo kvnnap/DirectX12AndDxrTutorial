@@ -7,7 +7,8 @@
 #include <functional>
 
 #include "WindowClass.h"
-#include "IO/IKeyboardWriter.h"
+#include "IO/ikeywriter.h"
+#include "IO/imousewriter.h"
 
 namespace UI {
 	class Window
@@ -15,7 +16,7 @@ namespace UI {
 	public:
 		static std::optional<int> ProcessMessages();
 
-		Window(const std::string& windowName, int width, int height, feanor::io::IKeyboardWriter* keyboardWriter = nullptr);
+		Window(const std::string& windowName, int width, int height, feanor::io::IKeyWriter* keyboardWriter = nullptr, feanor::io::IMouseWriter* mouseWriter = nullptr);
 		virtual ~Window();
 
 		HWND getHandle() const;
@@ -40,6 +41,7 @@ namespace UI {
 
 		HWND hWnd;
 
-		feanor::io::IKeyboardWriter* keyboardWriter;
+		feanor::io::IKeyWriter* keyboardWriter;
+		feanor::io::IMouseWriter* mouseWriter;
 	};
 }

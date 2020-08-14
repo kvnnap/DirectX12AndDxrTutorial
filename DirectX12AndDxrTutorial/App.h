@@ -1,5 +1,6 @@
 #include "Window/Window.h"
 #include "IO/Keyboard.h"
+#include "IO/mouse.h"
 #include "Engine/IRenderer.h"
 
 #include <memory>
@@ -25,6 +26,7 @@ private:
 
 	std::unique_ptr<UI::Window> window;
 	std::unique_ptr<feanor::io::Keyboard> keyboard;
+	std::unique_ptr<feanor::io::Mouse> mouse;
 	std::unique_ptr<Engine::IRenderer> renderer;
 };
 

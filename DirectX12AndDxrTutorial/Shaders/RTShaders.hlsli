@@ -56,6 +56,43 @@ namespace Shaders {
 		std::uint32_t seed1;
 		std::uint32_t seed2;
 		std::uint32_t clear;
+
+		// Anvil
+		std::uint32_t debugPixelX;
+		std::uint32_t debugPixelY;
+		std::uint32_t debugPixel;
+		std::uint32_t padding;
+	};
+
+	// Anvil
+	struct PathTracingIntersectionContext {
+		// Ray - XMVECTOR's are pods
+		DirectX::XMVECTOR origin;
+		DirectX::XMVECTOR direction;
+		float tMin;
+		float tMax;
+		float tHit;
+		float rayProbability;
+
+		DirectX::XMVECTOR radiance;
+		DirectX::XMVECTOR unitNormal;
+
+		uint32_t rayDepth;
+		uint32_t rayType;
+		uint32_t primitiveId;
+		uint32_t materialId;
+	};
+
+	struct PathTracingPath {
+		uint32_t debugId;
+		uint32_t numRays;
+		uint32_t pixelX;
+		uint32_t pixelY;
+		uint32_t seed1;
+		uint32_t seed2;
+		uint32_t padding[2];
+		DirectX::XMVECTOR totalRadiance;
+		PathTracingIntersectionContext pathTracingIntersectionContext[16];
 	};
 }
 #else
@@ -105,6 +142,39 @@ struct ConstBuff {
 	uint seed1;
 	uint seed2;
 	uint clear;
+	uint4 debugPixel; // Anvil
+};
+
+// Anvil
+struct PathTracingIntersectionContext {
+	// Ray - XMVECTOR's are pods
+	float4 origin;
+	float4 direction;
+
+	float tMin;
+	float tMax;
+	float tHit;
+	float rayProbability;
+
+	float4 radiance;
+	float4 unitNormal;
+
+	uint rayDepth;
+	uint rayType;
+	uint primitiveId;
+	uint materialId;
+};
+
+struct PathTracingPath {
+	uint debugId;
+	uint numRays;
+	uint2 pixel;
+	uint seed1;
+	uint seed2;
+	uint2 padding;
+
+	float4 totalRadiance;
+	PathTracingIntersectionContext pathTracingIntersectionContext[16];
 };
 #endif
 

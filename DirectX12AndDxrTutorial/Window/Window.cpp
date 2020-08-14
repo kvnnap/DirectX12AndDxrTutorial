@@ -1,5 +1,7 @@
 #include "Window.h"
 
+#include <windowsx.h>
+
 #include <algorithm>
 
 #include "Exception/Exception.h"
@@ -14,7 +16,7 @@ LRESULT CALLBACK Window::WndProcSetup(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 	if (msg == WM_NCCREATE) {
 		CREATESTRUCT* createStruct = reinterpret_cast<CREATESTRUCT*>(lParam);
 		Window* window = reinterpret_cast<Window*>(createStruct->lpCreateParams);
-		
+
 		SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
 		SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(Window::WndProcThunk));
 
@@ -49,7 +51,7 @@ LRESULT Window::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexc
 {
 	bool handled = std::any_of(callbacks.begin(), callbacks.end(), [hwnd, msg, wParam, lParam](const WNDCALLBACKFN& fn) -> bool {
 		return fn(hwnd, msg, wParam, lParam) != 0;
-	});
+		});
 
 	if (handled) {
 		return handled;
@@ -72,6 +74,29 @@ LRESULT Window::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexc
 			keyboardWriter->depressKey(static_cast<uint8_t>(wParam));
 		}
 		break;
+
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+		if (mouseWriter) {
+			if (msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN) {
+				mouseWriter->pressKey(msg == WM_LBUTTONDOWN ? 0 : msg == WM_RBUTTONDOWN ? 1 : 2);
+			}
+			else if (msg == WM_LBUTTONUP || msg == WM_RBUTTONUP || msg == WM_MBUTTONUP) {
+				mouseWriter->depressKey(msg == WM_LBUTTONUP ? 0 : msg == WM_RBUTTONUP ? 1 : 2);
+			}
+		}
+		[[fallthrough]]; // C++17 syntax: Annotate intentional fallthrough
+	case WM_MOUSEMOVE:
+	case WM_MOUSEWHEEL:
+		if (mouseWriter) {
+			mouseWriter->updatePosition(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+			mouseWriter->scroll(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA);
+		}
+		break;
 	}
 
 	return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -85,8 +110,8 @@ void Window::cleanup()
 	}
 }
 
-Window::Window(const string& windowName, int width, int height, feanor::io::IKeyboardWriter* keyboardWriter)
-	: hWnd(), keyboardWriter ( keyboardWriter )
+Window::Window(const string& windowName, int width, int height, feanor::io::IKeyWriter* keyboardWriter, feanor::io::IMouseWriter* mouseWriter)
+	: hWnd(), keyboardWriter(keyboardWriter), mouseWriter(mouseWriter)
 {
 	auto dwClass = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
 
@@ -96,7 +121,7 @@ Window::Window(const string& windowName, int width, int height, feanor::io::IKey
 	if (!AdjustWindowRect(&rect, dwClass, false)) {
 		ThrowException("Cannot adjust client area");
 	}
-	
+
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 
 	hWnd = CreateWindowEx(NULL,
@@ -116,7 +141,7 @@ Window::Window(const string& windowName, int width, int height, feanor::io::IKey
 	}
 
 	ShowWindow(hWnd, SW_SHOW);
-	
+
 }
 
 Window::~Window()

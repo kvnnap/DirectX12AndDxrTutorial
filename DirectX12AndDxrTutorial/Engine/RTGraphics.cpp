@@ -23,7 +23,6 @@
 #include "../Libraries/imgui/imgui_impl_win32.h"
 #include "../Libraries/imgui/imgui_impl_dx12.h"
 #include "../Libraries/stb/stb_image.h"
-
 #include "../Shaders/RTShaders.hlsli"
 
 namespace wrl = Microsoft::WRL;
@@ -32,6 +31,7 @@ namespace dx = DirectX;
 using namespace std;
 using namespace Util;
 using namespace Engine;
+using Shaders::PathTracingPath;
 
 RTGraphics::RTGraphics(HWND hWnd)
 	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
@@ -125,6 +125,12 @@ void Engine::RTGraphics::init()
 
 	Shaders::ConstBuff cBuff = {};
 
+	// DEBUG-ANVIL SECTION
+	for (size_t i = 0; i < std::size(readbackAnvilBuffer); ++i) {
+		readbackAnvilBuffer[i] = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_READBACK, sizeof(PathTracingPath), D3D12_RESOURCE_STATE_COPY_DEST);
+	}
+	// END DEBUG-ANVIL SECTION
+
 	wrl::ComPtr<ID3D12Resource> cBuffIntBuffer;
 	pConstantBuffer = DXUtil::uploadDataToDefaultHeap(
 		pDevice,
@@ -215,7 +221,7 @@ void Engine::RTGraphics::init()
 		D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	wrl::ComPtr<ID3D12Resource> shaderTableTempBuffer;
-	pShadingTable = createShaderTable(shaderTableTempBuffer);
+	createShaderTable(shaderTableTempBuffer);
 
 	pCommandQueue->executeCommandList(pCurrentCommandList);
 	pCommandQueue->flush();
@@ -322,7 +328,9 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 	cBuff.seed1 = sampler.nextUInt32();
 	cBuff.seed2 = sampler.nextUInt32();
 	cBuff.clear = clear ? 1 : 0;
-
+	cBuff.debugPixel = 1;
+	cBuff.debugPixelX = 242;
+	cBuff.debugPixelY = 450;
 	//
 	DXUtil::updateDataInDefaultHeap(
 		pDevice,
@@ -355,6 +363,10 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 
 void Engine::RTGraphics::endFrame()
 {
+	// Anvil
+	//pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputAnvilBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+	pCurrentCommandList->CopyResource(readbackAnvilBuffer[pCurrentBackBufferIndex].Get(), outputAnvilBuffer.Get());
+
 	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
 
 	// Change the back buffer from the render target state to the present state
@@ -383,6 +395,17 @@ void Engine::RTGraphics::endFrame()
 	// Set current back buffer and Wait for any fence values associated to it
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
+
+	// Anvil
+	D3D12_RANGE readbackAnvilBufferRange{ 0, sizeof(PathTracingPath) };
+	PathTracingPath* debugPathTracingPath{};
+	readbackAnvilBuffer[pCurrentBackBufferIndex]->Map(0, &readbackAnvilBufferRange, reinterpret_cast<void**>(&debugPathTracingPath));
+	if (debugPathTracingPath->debugId == 0) {
+		cout << "AAA" << endl;
+	}
+	// Do read
+	readbackAnvilBufferRange.End = 0;
+	readbackAnvilBuffer[pCurrentBackBufferIndex]->Unmap(0, &readbackAnvilBufferRange);
 }
 
 Camera& Engine::RTGraphics::getCamera()
@@ -423,7 +446,7 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	
 	// Third - Local Root Signature for Ray Gen shader
 	// Build the root signature descriptor and create root signature
-	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));//gOutput, gRadiance
+	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 3, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE));//gOutput, gRadiance, gAnvilBuffer
 	rootSignatureManager->addDescriptorRange("BVHAndTextures", CD3DX12_DESCRIPTOR_RANGE1(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_NONE)); //gRtScene
 
 	if (!textures.empty()) {
@@ -524,7 +547,9 @@ void Engine::RTGraphics::createShaderResources()
 	// The output resource
 	outputRTTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_COPY_SOURCE);
 	radianceTexture = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, winWidth, winHeight, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_FLAG_NONE, DXGI_FORMAT_R32G32B32A32_FLOAT);
-	
+	outputAnvilBuffer = DXUtil::createCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(PathTracingPath), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	//outputAnvilBuffer = DXUtil::createTextureCommittedResource(pDevice, D3D12_HEAP_TYPE_DEFAULT, sizeof(PathTracingPath), 1, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, DXGI_FORMAT_UNKNOWN);
+
 	// Create the UAV descriptor first (needs to be same order as in root signature)
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D; // In below, set it at the first location of this heap
@@ -533,6 +558,14 @@ void Engine::RTGraphics::createShaderResources()
 
 	descHeapManager.setUAV(entryNumber++, uavDesc, pDevice, outputRTTexture);
 	descHeapManager.setUAV(entryNumber++, uavDesc, pDevice, radianceTexture);
+
+	// Anvil
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc2 = {};
+	uavDesc2.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	uavDesc2.Buffer.NumElements = 1;
+	uavDesc2.Buffer.StructureByteStride = sizeof(PathTracingPath);
+
+	descHeapManager.setUAV(entryNumber++, uavDesc2, pDevice, outputAnvilBuffer);
 
 	// Create the SRV descriptor in second place (following same order as in root signature)
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};

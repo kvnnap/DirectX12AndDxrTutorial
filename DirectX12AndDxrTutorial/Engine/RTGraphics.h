@@ -83,18 +83,16 @@ namespace Engine {
 		// Tracks the backbuffers used in the swapchain
 		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
 
+		// Resources for Anvil
+		Microsoft::WRL::ComPtr<ID3D12Resource> outputAnvilBuffer;
+		Microsoft::WRL::ComPtr<ID3D12Resource> readbackAnvilBuffer[numBackBuffers];
+
 		UINT pRTVDescriptorSize;
 		UINT pCurrentBackBufferIndex;
 		uint64_t frameFenceValues[numBackBuffers];
 
 		// Temporary triangle stuff here
 		Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer;
-
-		// Root signature
-		Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature;
-
-		// Pipeline state object.
-		Microsoft::WRL::ComPtr<ID3D12Resource> pShadingTable;
 
 		D3D12_RECT scissorRect;
 		D3D12_VIEWPORT viewport;

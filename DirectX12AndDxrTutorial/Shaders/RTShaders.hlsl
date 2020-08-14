@@ -13,6 +13,10 @@ SamplerState gSampler : register(s0);
 // Output texture
 RWTexture2D<float4> gOutput : register(u0);
 RWTexture2D<float4> gRadiance : register(u1);
+RWStructuredBuffer<PathTracingPath> gAnvilBuffer : register(u2);
+
+// static variables get reset after every dispatch
+static bool isDebugging;
 
 cbuffer CB1 : register(b0) 
 {
@@ -101,6 +105,21 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 	shadowRay.TMin = 0.001f;
 	shadowRay.TMax = 0.99f;
 
+	uint rayNumber;
+	if (isDebugging) {
+		rayNumber = ++gAnvilBuffer[0].numRays;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].origin = float4(shadowRay.Origin, 0.f);
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].direction = float4(shadowRay.Direction, 0.f);
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMin = shadowRay.TMin;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMax = shadowRay.TMax;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tHit = 1.f;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayProbability = 1.f / cBuffer.numLights;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].unitNormal = float4(getUnitNormal(a[0], a[1], a[2]), 0.f);
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayType = 1;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].primitiveId = areaLight.primitiveId;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].materialId = areaLight.materialId;
+	}
+
 	RayPayload payload;
 	TraceRay(
 		gRtScene,	// Acceleration Structure
@@ -114,6 +133,9 @@ float3 explicitLighting(inout uint seed, uint primitiveId, float3 interPoint, fl
 
 	// We're occluded, return
 	if (payload.color[0] == 1.f) {
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tHit = payload.color[1];
+		}
 		return radiance;
 	}
 
@@ -141,6 +163,15 @@ void rayGen()
 	// dimensions - the previous x,y point is contained within these dimensions
 	const uint2 launchDim = DispatchRaysDimensions().xy;
 
+	isDebugging = cBuffer.debugPixel.z == 1 && cBuffer.debugPixel.x == launchIndex.x && cBuffer.debugPixel.y == launchIndex.y;
+	if (isDebugging) {
+		gAnvilBuffer[0].debugId = gRadiance[launchIndex].w + 1;
+		gAnvilBuffer[0].numRays = 0;
+		gAnvilBuffer[0].pixel = launchIndex;
+		gAnvilBuffer[0].seed1 = cBuffer.seed1;
+		gAnvilBuffer[0].seed2 = cBuffer.seed2;
+	}
+
 	if (cBuffer.numLights == 0) {
 		gOutput[launchIndex] = float4(0.f, 0.f, 0.f, 0.f);
 		return;
@@ -163,8 +194,11 @@ void rayGen()
 
 	// Let's ray trace
 	float3 radiance = float3(0.f, 0.f, 0.f);
-	const int iterCount = 1;
+	const int iterCount = 1; // Ideally 1 for anvil debugging
 	for (int i = 0; i < iterCount; ++i) {
+		
+		// Used for anvil
+		uint rayNumber = gAnvilBuffer[0].numRays;
 
 		// Note: Multiplying by iterCount not required if seed is changing on the Host side (not assuming i)
 		uint seed = rand_init(
@@ -189,8 +223,24 @@ void rayGen()
 
 		ray.Direction = normalize(pointOnObjectPlane - ray.Origin);
 
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].origin = float4(ray.Origin, 0.f);
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].direction = float4(ray.Direction, 0.f);
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMin = ray.TMin;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMax = ray.TMax;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tHit = 0.f;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayProbability = 1.f;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayDepth = 0;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayType = 0;
+		}
+
 		RayPayload payload;
 		payload.color[0] = asfloat(seed); // Interpret the bits of seed as if it was a float
+		payload.color[1] = isDebugging ? 1.f : 0.f;
+
+		if (isDebugging) {
+			payload.color[2] = asfloat(gAnvilBuffer[0].numRays);
+		}
 
 		TraceRay(
 			gRtScene,	// Acceleration Structure
@@ -202,10 +252,19 @@ void rayGen()
 			ray,
 			payload);
 		radiance += payload.color;
+
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].radiance = float4(payload.color, 0.f);
+			++gAnvilBuffer[0].numRays;
+		}
 	}
 
 	// Accumulate local radiance to global radiance (need to divide by N)
 	gRadiance[launchIndex] += float4(radiance, iterCount);
+
+	if (isDebugging) {
+		gAnvilBuffer[0].totalRadiance = float4(gRadiance[launchIndex].xyz, 0.f);
+	}
 
 	// Tonemap and convert radiance (which is gRadiance / N)
 	gOutput[launchIndex] = float4(linearToSrgb(toneMap(gRadiance[launchIndex].xyz / gRadiance[launchIndex].w)), 1.f);
@@ -220,6 +279,15 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	float3 unitNormal = getUnitNormal(verts.Load(vIndex), verts.Load(vIndex + 1), verts.Load(vIndex + 2), InstanceIndex());
 	const float3 unitRayDir = normalize(WorldRayDirection());
 
+	isDebugging = payload.color[1] == 1.f;
+	uint rayNumber;
+	if (isDebugging) {
+		rayNumber = asuint(payload.color[2]);
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].primitiveId = pIndex;
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tHit = RayTCurrent();
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].unitNormal = float4(unitNormal, 0.f);
+	}
+
 	//Extract seed
 	uint seed = asuint(payload.color[0]);
 	payload.color = float3(0.f, 0.f, 0.f);
@@ -230,6 +298,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	}
 	
 	FaceAttributes fAttr = faceAttributes.Load(pIndex);
+	
+	if (isDebugging) {
+		gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].materialId = fAttr.materialId;
+	}
 
 	//explicitLighting(inout uint seed, float3 interPoint, float3 unitNormal, uint materialId)
 	float3 interPoint = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
@@ -242,14 +314,24 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 	uint i = 0;
 	bool includeEmissive = true; //always include emissive the first time round (direct ray to light case)
 	do {
+		float3 localRadiance = float3(0.f, 0.f, 0.f);
+
 		// Add emissive value.. - if includeEmissive is false, it means it was already included via `explicitLighting`
 		if (includeEmissive && any(materials[fAttr.materialId].emission)) {
-			totalRadiance += localCoefficients * (float3)(cBuffer.areaLights[fAttr.areaLightId].intensity * materials[fAttr.materialId].emission);
+			localRadiance = localCoefficients * (float3)(cBuffer.areaLights[fAttr.areaLightId].intensity * materials[fAttr.materialId].emission);
 		}
 
 		// Add Direct (if r >= c)
-		totalRadiance += localCoefficients * explicitLighting(seed, pIndex, interPoint, unitNormal, fAttr.materialId, bary);
-		
+		localRadiance += localCoefficients * explicitLighting(seed, pIndex, interPoint, unitNormal, fAttr.materialId, bary);
+
+		// IF debugging and explicitLighting generated a shadow ray..
+		if (isDebugging && rayNumber != gAnvilBuffer[0].numRays) {
+			rayNumber = gAnvilBuffer[0].numRays;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayDepth = i + 1;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].radiance = float4(localRadiance, 0.f); // TODO Check
+		}
+
+		totalRadiance += localRadiance;
 
 		// Add Indirect and Direct
 		// For use with russian roulette
@@ -262,10 +344,27 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		indirectRay.TMax = 3.402823e+38;
 
 		IndirectPayload indirectPayload;
-		const float probabilityOfContinuing = ++i <= 6 ? 1.f : max(0.25f, dot(unitNormal, indirectRay.Direction));
+		++i;
+		const float3 plc = getDiffuseValue(pIndex, fAttr.materialId, bary) * localCoefficients;
+		//const float probabilityOfContinuing = i <= 6 ? 1.f : max(0.25f, dot(unitNormal, indirectRay.Direction)); // Original
+		//const float probabilityOfContinuing = i <= 3 ? 1.f : i <= 7 ? max(0.25f, dot(unitNormal, indirectRay.Direction)) : 0.f; // biased
+		//const float probabilityOfContinuing = (localCoefficients.x + localCoefficients.y + localCoefficients.z) * dot(unitNormal, indirectRay.Direction) / 3.f;
+		const float probabilityOfContinuing = i <= 7 ? (plc.x + plc.y + plc.z) * dot(unitNormal, indirectRay.Direction) / 3.f : 0.f; // Biased
 
 		if (rand_next(seed) > probabilityOfContinuing) {
 			break;
+		}
+
+		if (isDebugging) {
+			rayNumber = ++gAnvilBuffer[0].numRays;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].origin = float4(indirectRay.Origin, 0.f);
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].direction = float4(indirectRay.Direction, 0.f);
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMin = indirectRay.TMin;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tMax = indirectRay.TMax;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayProbability = probabilityOfContinuing;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayType = 2;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].rayDepth = i;
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].radiance = float4(0.f, 0.f, 0.f, 0.f); // TODO Check
 		}
 
 		TraceRay(
@@ -277,6 +376,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 			1,			// Miss shader index (within the shader table) (calls indirectMiss)
 			indirectRay,
 			indirectPayload);
+
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].tHit = indirectPayload.tHit;
+		}
 
 		// Traceray - get primitiveId & intersection point  (from t value)
 		if (indirectPayload.tHit == -1.f) { 
@@ -290,6 +393,12 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		pIndex = indirectPayload.primitiveId;
 		vIndex = pIndex * 3;
 		unitNormal = getUnitNormal(verts.Load(vIndex), verts.Load(vIndex + 1), verts.Load(vIndex + 2), indirectPayload.instanceIndex);
+
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].unitNormal = float4(unitNormal, 0.f); // TODO Check
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].primitiveId = pIndex;
+		}
+
 		if (dot(indirectRay.Direction, unitNormal) >= 0.f) {
 			break;
 		}
@@ -302,6 +411,10 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 		// tHit should be our length if indirectRay.Direction is unit
 		includeEmissive = length(indirectPayload.tHit * indirectRay.Direction) < allowedDistance;
 
+		if (isDebugging) {
+			gAnvilBuffer[0].pathTracingIntersectionContext[rayNumber].materialId = fAttr.materialId;
+		}
+
 	} while (true);
 
 	payload.color = totalRadiance;
@@ -310,7 +423,7 @@ void chs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 [shader("closesthit")]
 void shadowChs(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	payload.color = float3(1.f, 1.f, 1.f);
+	payload.color = float3(1.f, RayTCurrent(), 1.f);
 }
 
 [shader("closesthit")]
