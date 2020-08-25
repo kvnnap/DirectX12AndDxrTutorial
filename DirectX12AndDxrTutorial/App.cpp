@@ -15,8 +15,16 @@ using namespace std;
 using namespace UI;
 using feanor::io::Keyboard;
 using feanor::io::Mouse;
+using feanor::anvil::Anvil;
+using feanor::anvil::visualisation::BasicVisualiser;
 
-App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec() {}
+App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec(), anvil(Anvil::getInstance())
+{}
+
+App::~App()
+{
+	anvil.clear();
+}
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -26,11 +34,17 @@ int App::execute() noexcept
 
 	try
 	{
+		//scene.loadScene("sibenik.obj");
+		//scene.loadScene("SunTempleModel_v2.obj");
+		//scene.loadScene("tarxien_temple.obj");
+		string sceneFileName = "CornellBox-Original.obj";
 		keyboard = make_unique<Keyboard>();
 		mouse = make_unique<Mouse>();
 		window = make_unique<Window>("DX12 & DXR Tutorial", 1080, 720, keyboard.get(), mouse.get());
-		renderer = make_unique<Engine::RTGraphics>(window->getHandle());
-		renderer->init();
+		renderer = make_unique<Engine::RTGraphics>(window->getHandle(), mouse.get());
+		renderer->setDebugMode(true);
+		renderer->init(sceneFileName);
+		anvil.addSystem(make_shared<BasicVisualiser>(sceneFileName));
 
 		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 

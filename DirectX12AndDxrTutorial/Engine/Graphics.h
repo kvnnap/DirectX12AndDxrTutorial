@@ -28,9 +28,10 @@ namespace Engine {
 		virtual ~Graphics();
 
 		void clearBuffer(float red, float green, float blue) override;
-		void init() override;
+		void init(const std::string& sceneFileName) override;
 		void draw(uint64_t timeMs, bool& clear) override;
 		void endFrame() override;
+		void setDebugMode(bool debugEnabled) override;
 		Camera& getCamera() override;
 
 		void simpleDraw(uint64_t timeMs = 0);

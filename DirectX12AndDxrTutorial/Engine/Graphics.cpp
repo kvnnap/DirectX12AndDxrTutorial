@@ -129,7 +129,7 @@ void Graphics::clearBuffer(float red, float green, float blue)
 	pCurrentCommandList->ClearDepthStencilView(dsvDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 }
 
-void Engine::Graphics::init()
+void Engine::Graphics::init(const std::string&)
 {
 	// Let's draw a triangle.. 
 	// Vertex data for a colored cube.
@@ -306,6 +306,10 @@ void Graphics::endFrame()
 	GFXTHROWIFFAILED(pSwap->Present(1u, 0u));
 	pCurrentBackBufferIndex = pSwap->GetCurrentBackBufferIndex();
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
+}
+
+void Engine::Graphics::setDebugMode(bool debugEnabled)
+{
 }
 
 Camera& Engine::Graphics::getCamera()

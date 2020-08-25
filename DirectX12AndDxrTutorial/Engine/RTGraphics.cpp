@@ -23,7 +23,7 @@
 #include "../Libraries/imgui/imgui_impl_win32.h"
 #include "../Libraries/imgui/imgui_impl_dx12.h"
 #include "../Libraries/stb/stb_image.h"
-#include "../Shaders/RTShaders.hlsli"
+
 
 namespace wrl = Microsoft::WRL;
 namespace dx = DirectX;
@@ -32,9 +32,12 @@ using namespace std;
 using namespace Util;
 using namespace Engine;
 using Shaders::PathTracingPath;
+using feanor::io::IMouseReader;
+using feanor::anvil::Trace;
+using feanor::anvil::Anvil;
 
-RTGraphics::RTGraphics(HWND hWnd)
-	: winWidth(), winHeight(), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
+RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
+	: winWidth(), winHeight(), debugMode(), debugPixelX(), debugPixelY(), mouseReader(mouseReader), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
 	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport()
 {
 	RECT rect;
@@ -108,14 +111,11 @@ Engine::RTGraphics::~RTGraphics()
 	pCommandQueue->flush();
 }
 
-void Engine::RTGraphics::init()
+void Engine::RTGraphics::init(const std::string& sceneFileName)
 {
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 
-	 scene.loadScene("CornellBox-Original.obj");
-	//scene.loadScene("sibenik.obj");
-	//scene.loadScene("SunTempleModel_v2.obj");
-	//scene.loadScene("tarxien_temple.obj");
+	scene.loadScene(sceneFileName);
 	//scene.flattenGroups();
 	//scene.transformLightPosition(dx::XMMatrixTranslation(0.f, -0.02f, 0.f));
 
@@ -250,6 +250,12 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 
 void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 {
+	// process mouse quickly
+	if (debugMode && mouseReader != nullptr && mouseReader->hasKeyChanged(0) && mouseReader->isKeyPressed(0)) {
+		debugPixelX = mouseReader->getX();
+		debugPixelY = mouseReader->getY();
+	}
+
 	// Transform vertices in TLAS
 	//DXUtil::buildTopLevelAS(pDevice, pCurrentCommandList, blasBuffers.pResult, pTlasTempBuffer[pCurrentBackBufferIndex], (timeMs % 8000) / 8000.f * 6.28f, true, tlasBuffers);
 
@@ -328,9 +334,9 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 	cBuff.seed1 = sampler.nextUInt32();
 	cBuff.seed2 = sampler.nextUInt32();
 	cBuff.clear = clear ? 1 : 0;
-	cBuff.debugPixel = 1;
-	cBuff.debugPixelX = 242;
-	cBuff.debugPixelY = 450;
+	cBuff.debugPixel = debugMode ? 1 : 0;
+	cBuff.debugPixelX = debugPixelX;
+	cBuff.debugPixelY = debugPixelY;
 	//
 	DXUtil::updateDataInDefaultHeap(
 		pDevice,
@@ -364,8 +370,10 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 void Engine::RTGraphics::endFrame()
 {
 	// Anvil
-	//pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputAnvilBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
-	pCurrentCommandList->CopyResource(readbackAnvilBuffer[pCurrentBackBufferIndex].Get(), outputAnvilBuffer.Get());
+	if (debugMode) {
+		//pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputAnvilBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
+		pCurrentCommandList->CopyResource(readbackAnvilBuffer[pCurrentBackBufferIndex].Get(), outputAnvilBuffer.Get());
+	}
 
 	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
 
@@ -396,16 +404,38 @@ void Engine::RTGraphics::endFrame()
 	pCurrentBackBufferIndex = pSwapChain->GetCurrentBackBufferIndex();
 	pCommandQueue->waitForFenceValue(frameFenceValues[pCurrentBackBufferIndex]);
 
-	// Anvil
-	D3D12_RANGE readbackAnvilBufferRange{ 0, sizeof(PathTracingPath) };
-	PathTracingPath* debugPathTracingPath{};
-	readbackAnvilBuffer[pCurrentBackBufferIndex]->Map(0, &readbackAnvilBufferRange, reinterpret_cast<void**>(&debugPathTracingPath));
-	if (debugPathTracingPath->debugId == 0) {
-		cout << "AAA" << endl;
+	if (debugMode) {
+		// Anvil
+		D3D12_RANGE readbackAnvilBufferRange{ 0, sizeof(PathTracingPath) };
+		PathTracingPath* debugPathTracingPath{};
+		readbackAnvilBuffer[pCurrentBackBufferIndex]->Map(0, &readbackAnvilBufferRange, reinterpret_cast<void**>(&debugPathTracingPath));
+		if (debugPathTracingPath->debugId == 0) {
+			cout << "AAA" << endl;
+		}
+		memcpy(&localDebugPathTracingPath, debugPathTracingPath, sizeof(PathTracingPath));
+
+		vector<Shaders::PathTracingIntersectionContext> v;
+		v.insert(v.end(), begin(localDebugPathTracingPath.pathTracingIntersectionContext), begin(localDebugPathTracingPath.pathTracingIntersectionContext) + debugPathTracingPath->numRays);
+		
+		readbackAnvilBufferRange.End = 0;
+		readbackAnvilBuffer[pCurrentBackBufferIndex]->Unmap(0, &readbackAnvilBufferRange);
+
+		// Anvil stuff
+		trace.clear();
+		trace.add("ray", v);
+		Anvil::getInstance().tick();
 	}
-	// Do read
-	readbackAnvilBufferRange.End = 0;
-	readbackAnvilBuffer[pCurrentBackBufferIndex]->Unmap(0, &readbackAnvilBufferRange);
+}
+
+void Engine::RTGraphics::setDebugMode(bool debugEnabled)
+{
+	debugMode = debugEnabled;
+}
+
+void Engine::RTGraphics::setPixelToObserve(uint32_t x, uint32_t y)
+{
+	debugPixelX = x;
+	debugPixelY = y;
 }
 
 Camera& Engine::RTGraphics::getCamera()

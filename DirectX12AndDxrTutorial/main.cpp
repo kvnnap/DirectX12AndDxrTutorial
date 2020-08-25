@@ -1,20 +1,13 @@
 #include "App.h"
 
-#include "core/anvil.h"
-#include "visualisation/basic_visualiser.h"
-
 #include <iostream>
 #include <memory>
 
 using namespace std;
-using feanor::anvil::Anvil;
-using feanor::anvil::visualisation::BasicVisualiser;
 
 int main()
 {
 	App app;
-
-    Anvil& anvil = Anvil::getInstance();
 
     try {
         // Initialise ECS sytems
@@ -31,8 +24,6 @@ int main()
     }
 
 	auto ret = app.execute();
-
-    anvil.clear();
 
     return ret;
 }

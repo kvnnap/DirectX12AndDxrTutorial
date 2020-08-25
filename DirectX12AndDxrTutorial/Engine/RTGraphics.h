@@ -17,6 +17,7 @@
 #include "CommandQueue.h"
 #include "Camera.h"
 #include "IRenderer.h"
+#include "io/imousereader.h"
 
 #include "Scene.h"
 #include "UniformSampler.h"
@@ -24,20 +25,26 @@
 #include "RootSignatureManager.h"
 #include "ShadingTable.h"
 
+#include "../Shaders/RTShaders.hlsli"
+
+#include "core/trace.h"
+
 namespace Engine {
 	class RTGraphics 
 		: public IRenderer
 	{
 	public:
-		RTGraphics(HWND hWnd);
+		RTGraphics(HWND hWnd, feanor::io::IMouseReader* mouseReader = nullptr);
 		RTGraphics(const RTGraphics&) = delete;
 		RTGraphics& operator=(const RTGraphics&) = delete;
 		virtual ~RTGraphics();
 
 		void clearBuffer(float red, float green, float blue) override;
-		void init() override;
+		void init(const std::string& sceneFileName) override;
 		void draw(uint64_t timeMs, bool& clear) override;
 		void endFrame() override;
+		void setDebugMode(bool debugEnabled) override;
+		void setPixelToObserve(uint32_t x, uint32_t y);
 		Camera& getCamera() override;
 
 	private:
@@ -51,6 +58,10 @@ namespace Engine {
 
 		DxgiInfoManager infoManager;
 		int winWidth, winHeight;
+		bool debugMode;
+		uint32_t debugPixelX;
+		uint32_t debugPixelY;
+		feanor::io::IMouseReader* mouseReader;
 
 		Microsoft::WRL::ComPtr<ID3D12Device5> pDevice;
 		std::unique_ptr<CommandQueue> pCommandQueue;
@@ -86,6 +97,8 @@ namespace Engine {
 		// Resources for Anvil
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputAnvilBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> readbackAnvilBuffer[numBackBuffers];
+		Shaders::PathTracingPath localDebugPathTracingPath;
+		feanor::anvil::Trace trace;
 
 		UINT pRTVDescriptorSize;
 		UINT pCurrentBackBufferIndex;

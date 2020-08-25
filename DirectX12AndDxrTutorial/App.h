@@ -3,6 +3,9 @@
 #include "IO/mouse.h"
 #include "Engine/IRenderer.h"
 
+#include "core/anvil.h"
+#include "visualisation/basic_visualiser.h"
+
 #include <memory>
 
 #pragma once
@@ -11,7 +14,7 @@ class App
 {
 public:
 	App();
-	virtual ~App() = default;
+	virtual ~App();
 
 	int execute() noexcept;
 
@@ -28,5 +31,6 @@ private:
 	std::unique_ptr<feanor::io::Keyboard> keyboard;
 	std::unique_ptr<feanor::io::Mouse> mouse;
 	std::unique_ptr<Engine::IRenderer> renderer;
+	feanor::anvil::Anvil& anvil;
 };
 
