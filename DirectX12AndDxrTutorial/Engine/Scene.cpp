@@ -2,8 +2,8 @@
 
 #include "Exception/Exception.h"
 
-#include "Libraries/tinyobjloader/tiny_obj_loader.h"
-#include "Libraries/stb/stb_image.h"
+#include "tiny_obj_loader.h"
+#include "stb/stb_image.h"
 
 using namespace std;
 using namespace Engine;

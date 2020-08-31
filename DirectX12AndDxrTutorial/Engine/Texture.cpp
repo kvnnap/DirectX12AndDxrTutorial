@@ -1,6 +1,6 @@
 #include "Texture.h"
 
-#include "Libraries/stb/stb_image.h"
+#include "stb/stb_image.h"
 
 Engine::Texture::Texture(const std::string& fileName)
 	: width(), height(), channels(), bytesPerPixel(), data(nullptr, stbImageDeleter)

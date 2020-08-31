@@ -2,6 +2,9 @@
 #include "Exception/Exception.h"
 #include "Engine/Graphics.h"
 #include "Engine/RTGraphics.h"
+#include "scene/scene.h"
+#include "scene/wavefront_loader.h"
+#include "core/renderer/opengl_renderer.h"
 
 #define NOMINMAX
 #include <Windows.h>
@@ -16,6 +19,9 @@ using namespace UI;
 using feanor::io::Keyboard;
 using feanor::io::Mouse;
 using feanor::anvil::Anvil;
+using feanor::anvil::scene::Scene;
+using feanor::anvil::scene::WavefrontLoader;
+using feanor::anvil::renderer::OpenGLRenderer;
 using feanor::anvil::visualisation::BasicVisualiser;
 
 App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec(), anvil(Anvil::getInstance())
@@ -44,7 +50,16 @@ int App::execute() noexcept
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle(), mouse.get());
 		renderer->setDebugMode(true);
 		renderer->init(sceneFileName);
-		anvil.addSystem(make_shared<BasicVisualiser>(sceneFileName));
+
+		//Anvil
+		auto scene = make_shared<Scene>();
+		WavefrontLoader().loadScene(*scene, sceneFileName);
+		auto glRenderer = make_shared<OpenGLRenderer>();
+		glRenderer->setScene(scene);
+		glRenderer->render();
+
+		auto basicVisualiser = make_shared<BasicVisualiser>(glRenderer, scene);
+		anvil.addSystem(basicVisualiser);
 
 		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 

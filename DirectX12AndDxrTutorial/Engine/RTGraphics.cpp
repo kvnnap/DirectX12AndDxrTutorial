@@ -19,11 +19,10 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-#include "../Libraries/imgui/imgui.h"
+#include "imgui/imgui.h"
 #include "../Libraries/imgui/imgui_impl_win32.h"
 #include "../Libraries/imgui/imgui_impl_dx12.h"
-#include "../Libraries/stb/stb_image.h"
-
+#include "stb/stb_image.h"
 
 namespace wrl = Microsoft::WRL;
 namespace dx = DirectX;
@@ -90,23 +89,38 @@ RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 	// Setup ImGui
 	bool valid = IMGUI_CHECKVERSION();
 	pImGuiDescriptorHeap = DXUtil::createDescriptorHeap(pDevice, 1u, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
-	ImGuiContext* context = ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO();
-	ImGui_ImplWin32_Init(hWnd);
-	ImGui_ImplDX12_Init(
-		pDevice.Get(),
-		numBackBuffers,
-		DXGI_FORMAT_R8G8B8A8_UNORM,
-		pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
-		pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	ImGui::StyleColorsDark();
+	
+	{
+		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
+		ImGuiContext* prevContext = ImGui::GetCurrentContext();
+		imguiContext = ImGui::CreateContext();
+		ImGui::SetCurrentContext(imguiContext);
+		ImGuiIO& io = ImGui::GetIO();
+		ImGui_ImplWin32_Init(hWnd);
+		ImGui_ImplDX12_Init(
+			pDevice.Get(),
+			numBackBuffers,
+			DXGI_FORMAT_R8G8B8A8_UNORM,
+			pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+			pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		ImGui::StyleColorsDark();
+		ImGui::SetCurrentContext(prevContext);
+	}
 }
 
 Engine::RTGraphics::~RTGraphics()
 {
-	ImGui_ImplDX12_Shutdown();
-	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();
+	{
+		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
+		ImGuiContext* prevContext = ImGui::GetCurrentContext();
+		ImGui::SetCurrentContext(imguiContext);
+
+		ImGui_ImplDX12_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+
+		ImGui::SetCurrentContext(prevContext);
+	}
 
 	pCommandQueue->flush();
 }
@@ -262,6 +276,10 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 	Shaders::ConstBuff cBuff = {};
 
 	// Start the Dear ImGui frame
+	std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
+	ImGuiContext* prevContext = ImGui::GetCurrentContext();
+	ImGui::SetCurrentContext(imguiContext);
+
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
@@ -365,6 +383,7 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 
 	// Assemble together draw data
 	ImGui::Render();
+	ImGui::SetCurrentContext(prevContext);
 }
 
 void Engine::RTGraphics::endFrame()
@@ -387,8 +406,14 @@ void Engine::RTGraphics::endFrame()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
 	pCurrentCommandList->OMSetRenderTargets(1u, &rtvDescriptorHandle, FALSE, nullptr);
 
-	pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
-	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
+	{
+		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
+		ImGuiContext* prevContext = ImGui::GetCurrentContext();
+		ImGui::SetCurrentContext(imguiContext);
+		pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
+		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
+		ImGui::SetCurrentContext(prevContext);
+	}
 
 	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 	// Execute command list

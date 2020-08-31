@@ -115,7 +115,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(FEANOR_ROOT)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Core_d.lib;Anvil_d.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);imgui_d.lib;stb_d.lib;tinyobjloader_d.lib;Core_d.lib;Anvil_d.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -159,7 +159,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(FEANOR_ROOT)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);Core.lib;Anvil.lib</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);imgui.lib;stb.lib;tinyobjloader.lib;Core.lib;Anvil.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -167,8 +167,6 @@
     <ClCompile Include="Engine\RTGraphics.cpp" />
     <ClCompile Include="Engine\Texture.cpp" />
     <ClCompile Include="Engine\UniformSampler.cpp" />
-    <ClCompile Include="Libraries\stb\stb_image.cc" />
-    <ClCompile Include="Libraries\tinyobjloader\tiny_obj_loader.cc" />
     <ClCompile Include="Engine\Scene.cpp" />
     <ClCompile Include="Engine\ShadingTable.cpp" />
     <ClCompile Include="Engine\RootSignatureManager.cpp" />
@@ -180,12 +178,8 @@
     <ClCompile Include="Engine\DxgiInfoManager.cpp" />
     <ClCompile Include="Engine\Graphics.cpp" />
     <ClCompile Include="Exception\DxgiInfoException.cpp" />
-    <ClCompile Include="Libraries\imgui\imgui.cpp" />
-    <ClCompile Include="Libraries\imgui\imgui_demo.cpp" />
-    <ClCompile Include="Libraries\imgui\imgui_draw.cpp" />
     <ClCompile Include="Libraries\imgui\imgui_impl_dx12.cpp" />
     <ClCompile Include="Libraries\imgui\imgui_impl_win32.cpp" />
-    <ClCompile Include="Libraries\imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Exception\Exception.cpp" />
     <ClCompile Include="Exception\WindowException.cpp" />
@@ -199,8 +193,6 @@
     <ClInclude Include="Engine\RTGraphics.h" />
     <ClInclude Include="Engine\Texture.h" />
     <ClInclude Include="Engine\UniformSampler.h" />
-    <ClInclude Include="Libraries\stb\stb_image.h" />
-    <ClInclude Include="Libraries\tinyobjloader\tiny_obj_loader.h" />
     <ClInclude Include="Engine\Scene.h" />
     <ClInclude Include="Engine\ShadingTable.h" />
     <ClInclude Include="Engine\RootSignatureManager.h" />
@@ -215,14 +207,8 @@
     <ClInclude Include="Exception\Exception.h" />
     <ClInclude Include="Exception\WindowException.h" />
     <ClInclude Include="Libraries\d3dx12.h" />
-    <ClInclude Include="Libraries\imgui\imconfig.h" />
-    <ClInclude Include="Libraries\imgui\imgui.h" />
     <ClInclude Include="Libraries\imgui\imgui_impl_dx12.h" />
     <ClInclude Include="Libraries\imgui\imgui_impl_win32.h" />
-    <ClInclude Include="Libraries\imgui\imgui_internal.h" />
-    <ClInclude Include="Libraries\imgui\imstb_rectpack.h" />
-    <ClInclude Include="Libraries\imgui\imstb_textedit.h" />
-    <ClInclude Include="Libraries\imgui\imstb_truetype.h" />
     <ClInclude Include="Window\Window.h" />
     <ClInclude Include="Window\WindowClass.h" />
   </ItemGroup>

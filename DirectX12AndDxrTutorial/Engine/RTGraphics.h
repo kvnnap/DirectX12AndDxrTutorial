@@ -28,6 +28,7 @@
 #include "../Shaders/RTShaders.hlsli"
 
 #include "core/trace.h"
+#include "imgui/imgui.h"
 
 namespace Engine {
 	class RTGraphics 
@@ -90,6 +91,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pRTVDescriptorHeap;
 
 		Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> pImGuiDescriptorHeap;
+		ImGuiContext* imguiContext;
 
 		// Tracks the backbuffers used in the swapchain
 		Microsoft::WRL::ComPtr<ID3D12Resource> pBackBuffers[numBackBuffers];
