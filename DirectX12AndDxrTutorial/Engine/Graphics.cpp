@@ -96,7 +96,8 @@ Graphics::Graphics(HWND hWnd)
 	ImGui_ImplDX12_Init(
 		pDevice.Get(), 
 		numBackBuffers,
-		DXGI_FORMAT_R8G8B8A8_UNORM, 
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		pImGuiDescriptorHeap.Get(),
 		pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	ImGui::StyleColorsDark();

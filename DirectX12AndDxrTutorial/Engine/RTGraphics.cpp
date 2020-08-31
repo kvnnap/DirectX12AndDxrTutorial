@@ -101,6 +101,7 @@ RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 			pDevice.Get(),
 			numBackBuffers,
 			DXGI_FORMAT_R8G8B8A8_UNORM,
+			pImGuiDescriptorHeap.Get(),
 			pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 			pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		ImGui::StyleColorsDark();
