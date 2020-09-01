@@ -85,7 +85,13 @@ int App::localExecute()
 {
 	while (true)
 	{
-		if (auto exitCode = Window::ProcessMessages()) {
+		std::optional<int> exitCode;
+		{
+			std::lock_guard guard(Anvil::getImguiMutex());
+			exitCode = Window::ProcessMessages();
+		}
+
+		if (exitCode) {
 			return *exitCode;
 		}
 

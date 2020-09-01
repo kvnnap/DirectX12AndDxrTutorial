@@ -92,9 +92,7 @@ RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 	
 	{
 		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
-		ImGuiContext* prevContext = ImGui::GetCurrentContext();
 		imguiContext = ImGui::CreateContext();
-		ImGui::SetCurrentContext(imguiContext);
 		ImGuiIO& io = ImGui::GetIO();
 		ImGui_ImplWin32_Init(hWnd);
 		ImGui_ImplDX12_Init(
@@ -105,7 +103,6 @@ RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 			pImGuiDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 			pImGuiDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		ImGui::StyleColorsDark();
-		ImGui::SetCurrentContext(prevContext);
 	}
 }
 
@@ -113,14 +110,10 @@ Engine::RTGraphics::~RTGraphics()
 {
 	{
 		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
-		ImGuiContext* prevContext = ImGui::GetCurrentContext();
-		ImGui::SetCurrentContext(imguiContext);
 
 		ImGui_ImplDX12_Shutdown();
 		ImGui_ImplWin32_Shutdown();
 		ImGui::DestroyContext();
-
-		ImGui::SetCurrentContext(prevContext);
 	}
 
 	pCommandQueue->flush();
@@ -278,8 +271,6 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 
 	// Start the Dear ImGui frame
 	std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
-	ImGuiContext* prevContext = ImGui::GetCurrentContext();
-	ImGui::SetCurrentContext(imguiContext);
 
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
@@ -384,7 +375,6 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 
 	// Assemble together draw data
 	ImGui::Render();
-	ImGui::SetCurrentContext(prevContext);
 }
 
 void Engine::RTGraphics::endFrame()
@@ -409,11 +399,8 @@ void Engine::RTGraphics::endFrame()
 
 	{
 		std::lock_guard<std::mutex> guard(Anvil::getImguiMutex());
-		ImGuiContext* prevContext = ImGui::GetCurrentContext();
-		ImGui::SetCurrentContext(imguiContext);
 		pCurrentCommandList->SetDescriptorHeaps(1u, pImGuiDescriptorHeap.GetAddressOf());
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
-		ImGui::SetCurrentContext(prevContext);
 	}
 
 	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
