@@ -100,7 +100,7 @@ namespace Engine {
 		Microsoft::WRL::ComPtr<ID3D12Resource> outputAnvilBuffer;
 		Microsoft::WRL::ComPtr<ID3D12Resource> readbackAnvilBuffer[numBackBuffers];
 		Shaders::PathTracingPath localDebugPathTracingPath;
-		feanor::anvil::Trace trace;
+		std::shared_ptr<feanor::anvil::Entity> anvilEntity;
 
 		UINT pRTVDescriptorSize;
 		UINT pCurrentBackBufferIndex;

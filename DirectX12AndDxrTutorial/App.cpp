@@ -5,6 +5,7 @@
 #include "scene/scene.h"
 #include "scene/wavefront_loader.h"
 #include "core/renderer/opengl_renderer.h"
+#include "visualisation/path_visualiser.h"
 
 #define NOMINMAX
 #include <Windows.h>
@@ -22,7 +23,7 @@ using feanor::anvil::Anvil;
 using feanor::anvil::scene::Scene;
 using feanor::anvil::scene::WavefrontLoader;
 using feanor::anvil::renderer::OpenGLRenderer;
-using feanor::anvil::visualisation::BasicVisualiser;
+using feanor::anvil::visualisation::PathVisualiser;
 
 App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec(), anvil(Anvil::getInstance())
 {}
@@ -58,8 +59,8 @@ int App::execute() noexcept
 		glRenderer->setScene(scene);
 		glRenderer->render();
 
-		auto basicVisualiser = make_shared<BasicVisualiser>(glRenderer, scene);
-		anvil.addSystem(basicVisualiser);
+		auto visualiser = make_shared<PathVisualiser>(glRenderer, scene);
+		anvil.addSystem(visualiser);
 
 		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 

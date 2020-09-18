@@ -4,7 +4,6 @@
 #include "Engine/IRenderer.h"
 
 #include "core/anvil.h"
-#include "visualisation/basic_visualiser.h"
 
 #include <memory>
 

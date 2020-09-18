@@ -427,15 +427,12 @@ void Engine::RTGraphics::endFrame()
 		}
 		memcpy(&localDebugPathTracingPath, debugPathTracingPath, sizeof(PathTracingPath));
 
-		vector<Shaders::PathTracingIntersectionContext> v;
-		v.insert(v.end(), begin(localDebugPathTracingPath.pathTracingIntersectionContext), begin(localDebugPathTracingPath.pathTracingIntersectionContext) + debugPathTracingPath->numRays);
-		
 		readbackAnvilBufferRange.End = 0;
 		readbackAnvilBuffer[pCurrentBackBufferIndex]->Unmap(0, &readbackAnvilBufferRange);
 
 		// Anvil stuff
-		trace.clear();
-		trace.add("ray", v);
+		Anvil::getInstance().removeEntities({ anvilEntity });
+		anvilEntity = Anvil::addReflectionEntity("Path", localDebugPathTracingPath);
 		Anvil::getInstance().tick();
 	}
 }
