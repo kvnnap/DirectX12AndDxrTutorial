@@ -1,5 +1,6 @@
 #include "AnvilRegistrations.h"
 #include "Shaders/RTShaders.hlsli"
+#include "Engine/Camera.h"
 #include "reflection/reflect.h"
 
 DirectXVectorWrapper::DirectXVectorWrapper(const DirectX::XMVECTOR& p_vector)
@@ -51,4 +52,11 @@ REFLECT_MEMBER(seed1)
 REFLECT_MEMBER(seed2)
 addMember("totalRadiance", totalRadiance);
 REFLECT_MEMBER(pathTracingIntersectionContext)
+REFLECT_END()
+
+DirectXVectorWrapper cameraPosition(const Engine::Camera& ptp) { return ptp.getPosition(); }
+DirectXVectorWrapper cameraDirection(const Engine::Camera& ptp) { return ptp.getDirection(); }
+REFLECT_BEGIN(Engine::Camera)
+addMember("Position", cameraPosition);
+addMember("Direction", cameraDirection);
 REFLECT_END()

@@ -6,6 +6,8 @@
 #include "scene/wavefront_loader.h"
 #include "core/renderer/opengl_renderer.h"
 #include "visualisation/path_visualiser.h"
+#include "system/camera_system.h"
+#include "system/mesh_system.h"
 
 #define NOMINMAX
 #include <Windows.h>
@@ -20,6 +22,8 @@ using namespace UI;
 using feanor::io::Keyboard;
 using feanor::io::Mouse;
 using feanor::anvil::Anvil;
+using feanor::anvil::CameraSystem;
+using feanor::anvil::MeshSystem;
 using feanor::anvil::scene::Scene;
 using feanor::anvil::scene::WavefrontLoader;
 using feanor::anvil::renderer::OpenGLRenderer;
@@ -55,12 +59,13 @@ int App::execute() noexcept
 		//Anvil
 		auto scene = make_shared<Scene>();
 		WavefrontLoader().loadScene(*scene, sceneFileName);
-		auto glRenderer = make_shared<OpenGLRenderer>();
+		auto glRenderer = make_shared<OpenGLRenderer>(true);
 		glRenderer->setScene(scene);
 		glRenderer->render();
 
-		auto visualiser = make_shared<PathVisualiser>(glRenderer, scene);
-		anvil.addSystem(visualiser);
+		anvil.addSystem(make_shared<CameraSystem>(glRenderer));
+		anvil.addSystem(make_shared<MeshSystem>(glRenderer));
+		anvil.addSystem(make_shared<PathVisualiser>(glRenderer, scene));
 
 		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 

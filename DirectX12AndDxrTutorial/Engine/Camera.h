@@ -4,6 +4,8 @@
 
 #include "IDrawableUI.h"
 
+#include "reflection/reflect.h"
+
 namespace Engine {
 	class Camera
 		: public IDrawableUI
@@ -74,6 +76,8 @@ namespace Engine {
 		float fNumber; // This is what is used to change aperture size in camera.. 
 		float focalPlaneDistance; // At `focalPlaneDistance` distance, the focal plane is found (plane where all points are in focus)
 								  // Can also be seen as objectPlaneDistance
+
+		REFLECT(Camera)
 	};
 }
 

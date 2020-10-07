@@ -83,6 +83,9 @@ RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 		1.f,
 		10.f);
 
+	Anvil::addReflectionEntity("Camera", *camera);
+	//Anvil::addReflectionEntity("Mesh", scene);
+
 	rootSignatureManager = make_shared<RootSignatureManager>();
 	shadingTable = make_unique<ShadingTable>(rootSignatureManager);
 
