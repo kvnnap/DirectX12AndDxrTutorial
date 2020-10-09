@@ -25,6 +25,7 @@ private:
 
 	uint64_t frameCounter, fpsFrameCounter;
 	long long msec, fpsMSec;
+	bool parallel;
 
 	std::unique_ptr<UI::Window> window;
 	std::unique_ptr<feanor::io::Keyboard> keyboard;

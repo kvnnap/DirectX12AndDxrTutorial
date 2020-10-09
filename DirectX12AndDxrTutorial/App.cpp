@@ -29,7 +29,7 @@ using feanor::anvil::scene::WavefrontLoader;
 using feanor::anvil::renderer::OpenGLRenderer;
 using feanor::anvil::visualisation::PathVisualiser;
 
-App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec(), anvil(Anvil::getInstance())
+App::App() : frameCounter(), fpsFrameCounter(), msec(), fpsMSec(), parallel(), anvil(Anvil::getInstance())
 {}
 
 App::~App()
@@ -55,27 +55,29 @@ int App::execute() noexcept
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle(), mouse.get());
 		renderer->setDebugMode(true);
 		renderer->init(sceneFileName);
+		
+		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 
 		//Anvil
-		auto scene = make_shared<Scene>();
-		WavefrontLoader().loadScene(*scene, sceneFileName);
-		auto glRenderer = make_shared<OpenGLRenderer>(true);
-		glRenderer->setScene(scene);
-		glRenderer->render();
+		{
+			auto scene = make_shared<Scene>();
+			WavefrontLoader().loadScene(*scene, sceneFileName);
+			auto glRenderer = make_shared<OpenGLRenderer>(parallel);
+			glRenderer->setScene(scene);
+			glRenderer->render();
 
-		anvil.addSystem(make_shared<CameraSystem>(glRenderer));
-		anvil.addSystem(make_shared<MeshSystem>(glRenderer));
-		anvil.addSystem(make_shared<PathVisualiser>(glRenderer, scene));
-
-		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
+			anvil.addSystem(make_shared<CameraSystem>(glRenderer));
+			anvil.addSystem(make_shared<MeshSystem>(glRenderer));
+			anvil.addSystem(make_shared<PathVisualiser>(glRenderer, scene));
+		}
 
 		return localExecute();
 	}
-	catch (Exception::Exception e) {
+	catch (const Exception::Exception& e) {
 		err = "App Exception: \n";
 		err += e.what();
 	}
-	catch (std::exception e) {
+	catch (const std::exception& e) {
 		err = "Standard Exception: \n";
 		err += e.what();
 	}
@@ -92,8 +94,11 @@ int App::localExecute()
 	while (true)
 	{
 		std::optional<int> exitCode;
-		{
+		if (parallel) {
 			std::lock_guard guard(Anvil::getImguiMutex());
+			exitCode = Window::ProcessMessages();
+		}
+		else {
 			exitCode = Window::ProcessMessages();
 		}
 

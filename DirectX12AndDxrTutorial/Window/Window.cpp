@@ -51,7 +51,7 @@ LRESULT Window::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexc
 {
 	bool handled = std::any_of(callbacks.begin(), callbacks.end(), [hwnd, msg, wParam, lParam](const WNDCALLBACKFN& fn) -> bool {
 		return fn(hwnd, msg, wParam, lParam) != 0;
-		});
+	});
 
 	if (handled) {
 		return handled;
@@ -67,13 +67,13 @@ LRESULT Window::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexc
 		if (keyboardWriter && !(lParam & (1 << 30))) {
 			keyboardWriter->pressKey(static_cast<uint8_t>(wParam));
 		}
-		break;
+		return 0;
 	case WM_KEYUP:
 	case WM_SYSKEYUP:
 		if (keyboardWriter) {
 			keyboardWriter->depressKey(static_cast<uint8_t>(wParam));
 		}
-		break;
+		return 0;
 
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:
@@ -96,7 +96,7 @@ LRESULT Window::wndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexc
 			mouseWriter->updatePosition(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 			mouseWriter->scroll(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA);
 		}
-		break;
+		return 0;
 	}
 
 	return DefWindowProc(hwnd, msg, wParam, lParam);
