@@ -240,10 +240,12 @@ std::vector<wrl::ComPtr<ID3D12Resource>> Util::DXUtil::createDepthStencilView(
 	HRESULT hr;
 	for (int i = 0; i < numDSV; ++i) {
 		// Create depth buffer
+		auto heapPropDesc = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		auto tex2DDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, winWidth, winHeight, 1u, 0u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
 		GFXTHROWIFFAILED(device->CreateCommittedResource(
-			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			&heapPropDesc,
 			D3D12_HEAP_FLAG_NONE,
-			&CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, winWidth, winHeight, 1u, 0u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL),
+			&tex2DDesc,
 			D3D12_RESOURCE_STATE_DEPTH_WRITE,
 			&clearValue,
 			IID_PPV_ARGS(&depthBuffers[i])
@@ -262,10 +264,12 @@ wrl::ComPtr<ID3D12Resource> Util::DXUtil::createCommittedResource(wrl::ComPtr<ID
 	wrl::ComPtr<ID3D12Resource> buffer;
 	
 	HRESULT hr;
+	auto heapPropDesc = CD3DX12_HEAP_PROPERTIES(heapType);
+	auto resBuffDesc = CD3DX12_RESOURCE_DESC::Buffer(size, resourceFlags);
 	GFXTHROWIFFAILED(device->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(heapType),
+		&heapPropDesc,
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(size, resourceFlags),
+		&resBuffDesc,
 		resourceState,
 		nullptr,
 		IID_PPV_ARGS(&buffer)
@@ -280,10 +284,12 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::createTextureCommittedResou
 
 	// TODO: Check - Do we need mip level 1 for Ray Tracing?
 	HRESULT hr;
+	auto heapPropDesc = CD3DX12_HEAP_PROPERTIES(heapType);
+	auto tex2DDesc = CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1u, 1u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 	GFXTHROWIFFAILED(device->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(heapType),
+		&heapPropDesc,
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1u, 1u, 1u, 0u, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS),
+		&tex2DDesc,
 		resourceState,
 		nullptr,
 		IID_PPV_ARGS(&buffer)
@@ -319,7 +325,8 @@ Microsoft::WRL::ComPtr<ID3D12Resource> Util::DXUtil::uploadTextureDataToDefaultH
 	UpdateSubresources(pCommandList.Get(), texResource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
 
 	// Change state so that it can be read
-	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState));
+	auto resBarrierDesc = CD3DX12_RESOURCE_BARRIER::Transition(texResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState);
+	pCommandList->ResourceBarrier(1, &resBarrierDesc);
 
 	return texResource;
 }
@@ -328,7 +335,8 @@ void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5>
 {
 	// Transition to correct state
 	if (previousState != D3D12_RESOURCE_STATE_COPY_DEST) {
-		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), previousState, D3D12_RESOURCE_STATE_COPY_DEST));
+		auto resBarrierDesc = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), previousState, D3D12_RESOURCE_STATE_COPY_DEST);
+		pCommandList->ResourceBarrier(1, &resBarrierDesc);
 	}
 
 	// Upload buffer to gpu
@@ -340,7 +348,8 @@ void Util::DXUtil::updateDataInDefaultHeap(Microsoft::WRL::ComPtr<ID3D12Device5>
 	UpdateSubresources(pCommandList.Get(), resource.Get(), tempResource.Get(), 0, 0, 1, &subresourceData);
 
 	// Change state so that it can be read
-	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState));
+	auto resBarrierDesc = CD3DX12_RESOURCE_BARRIER::Transition(resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, finalState);
+	pCommandList->ResourceBarrier(1, &resBarrierDesc);
 }
 
 
@@ -456,7 +465,8 @@ void Util::DXUtil::buildTopLevelAS(
 	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&rtStructureDescriptor, &prebuildInfo);
 
 	if (update) {
-		pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get()));
+		auto resBarrierDesc = CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get());
+		pCommandList->ResourceBarrier(1, &resBarrierDesc);
 	}
 	else {
 		// Create the buffers..
@@ -501,5 +511,6 @@ void Util::DXUtil::buildTopLevelAS(
 	pCommandList->BuildRaytracingAccelerationStructure(&tlasDesc, 0, nullptr);
 
 	// Insert barrier for uav access..
-	pCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get()));
+	auto resBarrierDesc = CD3DX12_RESOURCE_BARRIER::UAV(tlasBuffers.pResult.Get());
+	pCommandList->ResourceBarrier(1, &resBarrierDesc);
 }

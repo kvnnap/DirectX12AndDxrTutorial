@@ -128,7 +128,7 @@ void App::processFrame()
 		keyboard->isKeyPressed('B') ? 1.f : 0.f);
 	
 	Engine::Camera& camera = renderer->getCamera();
-	const float unitsPerSec = 3.f;
+	constexpr float unitsPerSec = 3.f;
 	float deltaUnits = deltaMs / 1000.f * unitsPerSec;
 
 	camera.incrementPositionAlongDirection(getValueIfPressed('D', -deltaUnits), getValueIfPressed('W', deltaUnits));

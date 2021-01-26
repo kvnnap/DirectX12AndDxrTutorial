@@ -247,11 +247,13 @@ void Engine::RTGraphics::clearBuffer(float red, float green, float blue)
 
 	pCurrentCommandList->SetDescriptorHeaps(1u, descriptorHeap.GetAddressOf());
 
-	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+	auto t = CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	pCurrentCommandList->ResourceBarrier(1u, &t);
 
 	// Transition the back buffer from the present state to the render target state
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
-	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+	t = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+	pCurrentCommandList->ResourceBarrier(1, &t);
 
 	// Clear the RTV with the specified colour
 	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
@@ -388,13 +390,15 @@ void Engine::RTGraphics::endFrame()
 		pCurrentCommandList->CopyResource(readbackAnvilBuffer[pCurrentBackBufferIndex].Get(), outputAnvilBuffer.Get());
 	}
 
-	pCurrentCommandList->ResourceBarrier(1u, &CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+	auto t = CD3DX12_RESOURCE_BARRIER::Transition(outputRTTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	pCurrentCommandList->ResourceBarrier(1u, &t);
 
 	// Change the back buffer from the render target state to the present state
 	auto backBuffer = pBackBuffers[pCurrentBackBufferIndex];
 	// perform copy
 	pCurrentCommandList->CopyResource(backBuffer.Get(), outputRTTexture.Get());
-	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET));
+	t = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	pCurrentCommandList->ResourceBarrier(1, &t);
 
 	// Draw imgui
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvDescriptorHandle(pRTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), pCurrentBackBufferIndex, pRTVDescriptorSize);
@@ -406,7 +410,8 @@ void Engine::RTGraphics::endFrame()
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCurrentCommandList.Get());
 	}
 
-	pCurrentCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+	t = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	pCurrentCommandList->ResourceBarrier(1, &t);
 	// Execute command list
 	frameFenceValues[pCurrentBackBufferIndex] = pCommandQueue->executeCommandList(pCurrentCommandList);
 
@@ -469,7 +474,8 @@ wrl::ComPtr<ID3D12StateObject> Engine::RTGraphics::createRtPipeline()
 	wrl::ComPtr<ID3DBlob> pRTShadersBlob;
 	GFXTHROWIFFAILED(D3DReadFileToBlob(L"./Shaders/RTShaders.cso", &pRTShadersBlob));
 	CD3DX12_DXIL_LIBRARY_SUBOBJECT dxilSubObject (stateObjectDesc);
-	dxilSubObject.SetDXILLibrary(&CD3DX12_SHADER_BYTECODE(pRTShadersBlob.Get()));
+	auto shaderByteCodeDesc = CD3DX12_SHADER_BYTECODE(pRTShadersBlob.Get());
+	dxilSubObject.SetDXILLibrary(&shaderByteCodeDesc);
 	const WCHAR* entryPoints[] = { L"rayGen", L"miss", L"chs", L"shadowChs", L"indirectChs", L"indirectMiss" };
 	dxilSubObject.DefineExports(entryPoints);
 
