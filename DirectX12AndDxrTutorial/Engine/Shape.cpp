@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <algorithm>
+//#include <iostream>
 
 #include "imgui/imgui.h"
 
@@ -66,6 +67,16 @@ DirectX::XMFLOAT3X4 Engine::Shape::getTransform() const
 		* DirectX::XMMatrixRotationZ(rotation.z)
 		* DirectX::XMMatrixTranslation(position.x, position.y, position.z)
 		;
+
+	//for (const auto& x : vertices)
+	//{
+	//	auto temp = DirectX::XMVector3Transform(DirectX::XMLoadFloat3(&x), matrix);
+	//	std::cout << name <<  ": ("
+	//		<< temp.m128_f32[0] << ", " 
+	//		<< temp.m128_f32[1] << ", " 
+	//		<< temp.m128_f32[2] << ", " 
+	//		<< temp.m128_f32[3] << ")" << std::endl;
+	//}
 
 	XMFLOAT3X4 mat;
 	XMStoreFloat3x4(&mat, matrix);

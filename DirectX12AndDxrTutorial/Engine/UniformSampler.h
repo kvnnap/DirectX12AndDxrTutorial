@@ -11,6 +11,7 @@ namespace Engine
 	{
 	public:
 		UniformSampler();
+		UniformSampler(uint32_t seed);
 		// Virtuals
 		float nextSample();
 		float nextSample(float min, float max);

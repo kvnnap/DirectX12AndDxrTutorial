@@ -49,17 +49,19 @@ int App::execute() noexcept
 		//scene.loadScene("SunTempleModel_v2.obj");
 		//scene.loadScene("tarxien_temple.obj");
 		string sceneFileName = "CornellBox-Original.obj";
+		//string sceneFileName = "CornellBox-Rotated.obj";
+		//string sceneFileName = "sibenik.obj";
 		keyboard = make_unique<Keyboard>();
 		mouse = make_unique<Mouse>();
 		window = make_unique<Window>("DX12 & DXR Tutorial", 1080, 720, keyboard.get(), mouse.get());
 		renderer = make_unique<Engine::RTGraphics>(window->getHandle(), mouse.get());
-		renderer->setDebugMode(true);
+		renderer->setDebugMode(false); // This too
 		renderer->init(sceneFileName);
 		
 		window->addWndProcCallback(ImGui_ImplWin32_WndProcHandler);
 
-		//Anvil
-		{
+		//Anvil - Uncomment to restore it
+		/*{
 			auto scene = make_shared<Scene>();
 			WavefrontLoader().loadScene(*scene, sceneFileName);
 			auto glRenderer = make_shared<OpenGLRenderer>(parallel);
@@ -69,7 +71,7 @@ int App::execute() noexcept
 			anvil.addSystem(make_shared<CameraSystem>(glRenderer));
 			anvil.addSystem(make_shared<MeshSystem>(glRenderer));
 			anvil.addSystem(make_shared<PathVisualiser>(glRenderer, scene));
-		}
+		}*/
 
 		return localExecute();
 	}

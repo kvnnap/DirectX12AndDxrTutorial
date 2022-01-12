@@ -37,7 +37,7 @@ using feanor::anvil::Anvil;
 
 RTGraphics::RTGraphics(HWND hWnd, IMouseReader* mouseReader)
 	: winWidth(), winHeight(), debugMode(), debugPixelX(), debugPixelY(), mouseReader(mouseReader), pRTVDescriptorSize(), pCurrentBackBufferIndex(), frameFenceValues{},
-	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport()
+	scissorRect(CD3DX12_RECT(0, 0, LONG_MAX, LONG_MAX)), viewport(), sampler()
 {
 	RECT rect;
 	GetClientRect(hWnd, &rect);
@@ -346,8 +346,8 @@ void Engine::RTGraphics::draw(uint64_t timeMs, bool& clear)
 	memcpy(cBuff.areaLights, scene.getLights().data(), sizeof(Shaders::AreaLight) * cBuff.numLights);
 
 	// seed
-	cBuff.seed1 = sampler.nextUInt32();
-	cBuff.seed2 = sampler.nextUInt32();
+	cBuff.seed1 = sampler.nextUInt32(); // 3809101599;// sampler.nextUInt32();
+	cBuff.seed2 = sampler.nextUInt32(); // 2481744892;// sampler.nextUInt32();
 	cBuff.clear = clear ? 1 : 0;
 	cBuff.debugPixel = debugMode ? 1 : 0;
 	cBuff.debugPixelX = debugPixelX;

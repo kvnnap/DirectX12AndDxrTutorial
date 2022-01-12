@@ -12,6 +12,12 @@ UniformSampler::UniformSampler()
 	dist(0.f, 1.f)
 { }
 
+UniformSampler::UniformSampler(uint32_t seed)
+	: mt(seed), dist(0.f, 1.f)
+{
+
+}
+
 float UniformSampler::nextSample() {
 	return dist(mt);
 }

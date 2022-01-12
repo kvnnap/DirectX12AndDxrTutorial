@@ -12,6 +12,7 @@ Camera::Camera(const XMVECTOR& p_position, const XMVECTOR& p_direction, float ne
 {
 	lookTo(direction);
 	perspectiveMatrix = DirectX::XMMatrixPerspectiveLH(nearWidth, nearHeight, nearZ, farZ);
+	//perspectiveMatrix = DirectX::XMMatrixPerspectiveFovLH(3.1415926535897 / 6, nearWidth / nearHeight, nearZ, farZ);
 }
 
 void Camera::recalculateViewMatrix()
@@ -161,9 +162,9 @@ void Camera::drawUI()
 
 	ImGui::Text("Camera 1");
 	changed =
-		  ImGui::InputFloat3("Position", position.m128_f32, 2)
-		| ImGui::InputFloat3("Direction", direction.m128_f32, 2)
-		| ImGui::InputFloat3("Up", up.m128_f32, 2);
+		  ImGui::InputFloat3("Position", position.m128_f32)
+		| ImGui::InputFloat3("Direction", direction.m128_f32)
+		| ImGui::InputFloat3("Up", up.m128_f32);
 
 	if (changed) {
 		up = XMVector3Normalize(up);
